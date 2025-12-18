@@ -1,0 +1,171 @@
+"""
+Configuration management for Mei Agent.
+Single source of truth for all settings.
+"""
+
+import os
+import yaml
+from dataclasses import dataclass, field
+from typing import Optional, List, Dict, Any
+from pathlib import Path
+
+
+@dataclass
+class AudioConfig:
+    """Audio/Speech settings"""
+    model_path: str = ""
+    device: str = "cpu"
+    sample_rate: int = 16000
+    energy_threshold: int = 0.02
+    wake_word: str = "mei"
+    listen_timeout: int = 5
+    phrase_timeout: int = 10
+    silence_duration: int = 3
+
+@dataclass
+class LLMConfig:
+    """Language Model settings"""
+    model_path: str = ""
+    context_length: int = 4096
+    max_tokens: int = 512
+    temperature: float = 0.1
+    threads: int = 4
+    gpu_layers: int = 0
+
+
+@dataclass
+class SystemConfig:
+    """System integration settings"""
+    multi_monitor: bool = True
+    virtual_desktops: bool = True
+    prefer_accessibility_api: bool = True  # Prefer API over mouse clicks
+
+
+@dataclass
+class MemoryConfig:
+    """Memory settings"""
+    database_path: str = "data/memory.db"
+    max_episodic_entries: int = 10000
+    similarity_threshold: float = 0.7
+
+
+@dataclass
+class SafetyConfig:
+    """Safety settings"""
+    confirm_destructive: bool = True  # Confirm before delete, send, etc.
+    blocked_apps: List[str] = field(default_factory=lambda: ["regedit.exe", "cmd.exe"])
+    max_actions_per_minute: int = 60
+
+
+@dataclass
+class Config:
+    """Main configuration"""
+    audio: AudioConfig = field(default_factory=AudioConfig)
+    llm: LLMConfig = field(default_factory=LLMConfig)
+    system: SystemConfig = field(default_factory=SystemConfig)
+    memory: MemoryConfig = field(default_factory=MemoryConfig)
+    safety: SafetyConfig = field(default_factory=SafetyConfig)
+    
+    debug: bool = False
+    log_level: str = "INFO"
+    
+    @classmethod
+    def load(cls, path: str = "config.yaml") -> "Config":
+        """Load configuration from YAML file."""
+        config = cls()
+        
+        if os.path.exists(path):
+            with open(path, 'r') as f:
+                data = yaml.safe_load(f) or {}
+            
+            # Update audio config
+            if 'audio' in data:
+                for key, value in data['audio'].items():
+                    if hasattr(config.audio, key):
+                        setattr(config.audio, key, value)
+            
+            # Update llm config
+            if 'llm' in data:
+                for key, value in data['llm'].items():
+                    if hasattr(config.llm, key):
+                        setattr(config.llm, key, value)
+            
+            # Update system config
+            if 'system' in data:
+                for key, value in data['system'].items():
+                    if hasattr(config.system, key):
+                        setattr(config.system, key, value)
+            
+            # Update memory config
+            if 'memory' in data:
+                for key, value in data['memory'].items():
+                    if hasattr(config.memory, key):
+                        setattr(config.memory, key, value)
+            
+            # Update safety config
+            if 'safety' in data:
+                for key, value in data['safety'].items():
+                    if hasattr(config.safety, key):
+                        setattr(config.safety, key, value)
+            
+            config.debug = data.get('debug', False)
+            config.log_level = data.get('log_level', 'INFO')
+        
+        return config
+    
+    def save(self, path: str = "config.yaml"):
+        """Save configuration to YAML file."""
+        data = {
+            'audio': {
+                'model_path': self.audio.model_path,
+                'device': self.audio.device,
+                'sample_rate': self.audio.sample_rate,
+                'energy_threshold': self.audio.energy_threshold,
+                'wake_word': self.audio.wake_word,
+            },
+            'llm': {
+                'model_path': self.llm.model_path,
+                'context_length': self.llm.context_length,
+                'max_tokens': self.llm.max_tokens,
+                'temperature': self.llm.temperature,
+                'threads': self.llm.threads,
+                'gpu_layers': self.llm.gpu_layers,
+            },
+            'system': {
+                'multi_monitor': self.system.multi_monitor,
+                'virtual_desktops': self.system.virtual_desktops,
+                'prefer_accessibility_api': self.system.prefer_accessibility_api,
+            },
+            'memory': {
+                'database_path': self.memory.database_path,
+                'max_episodic_entries': self.memory.max_episodic_entries,
+            },
+            'safety': {
+                'confirm_destructive': self.safety.confirm_destructive,
+                'blocked_apps': self.safety.blocked_apps,
+            },
+            'debug': self.debug,
+            'log_level': self.log_level,
+        }
+        
+        with open(path, 'w') as f:
+            yaml.dump(data, f, default_flow_style=False)
+
+
+# Global config instance
+_config: Optional[Config] = None
+
+
+def get_config() -> Config:
+    """Get the global configuration instance."""
+    global _config
+    if _config is None:
+        _config = Config.load()
+    return _config
+
+
+def init_config(path: str = "config.yaml") -> Config:
+    """Initialize configuration from file."""
+    global _config
+    _config = Config.load(path)
+    return _config
