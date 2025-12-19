@@ -32,7 +32,7 @@ class AudioListener:
         
         
         self.pyaudio = pyaudio.PyAudio()
-        self.stream = self.pyaudio.open(format = pyaudio.paInt16, channels = 1, rate = AudioConfig.sample_rate, input = True, frames_per_buffer= 1024)
+        self.stream = self.pyaudio.open(format = pyaudio.paInt16, channels = 1, rate = self.sample_rate, input = True, frames_per_buffer= 1024)
         self.speech_buffer = []
         self.silence_start_time = None
 
@@ -77,7 +77,7 @@ class AudioListener:
                 print(f"RMS: {energy:.4f}")  # Shows 4 decimal places
 
                 if self.state == AgentState.IDLE:
-                    if energy>self.threshold: # threshold not defined
+                    if energy>self.threshold:
                         self.state = AgentState.LISTENING
                         pre_roll = list(self.rolling_buffer)[-5:]
                         self.speech_buffer = pre_roll+ [chunk] 

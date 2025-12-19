@@ -1,17 +1,4 @@
-# test_listener.py (at project root)
-
-"""
-Simple test to verify AudioListener works.
-Run this directly: python test_listener.py
-"""
-
-import sys
 import time
-
-# Add your project to path if needed
-sys.path.insert(0, '.')
-
-# Import your modules
 from ...core.events import EventType, subscribe, get_event_bus
 from ...core.config import init_config
 from .listener import AudioListener
