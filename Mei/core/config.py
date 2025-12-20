@@ -8,7 +8,7 @@ import yaml
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Any
 from pathlib import Path
-
+from datetime import datetime
 
 @dataclass
 class AudioConfig:
@@ -26,6 +26,23 @@ class AudioConfig:
     compute_type: str = "int8"
     language: str = 'en'
     beam_size: int = 5
+
+@dataclass
+class KnownApps:
+    app_dir_file:str = 'known_apps.csv'
+
+@dataclass                                                    
+class ProcessInfo:                                            
+    pid: int                  
+    name: str                 
+    path: Optional[str]       
+    # exe: str
+    status: str               
+    memory_info: float
+    memory_mb: float        
+    cpu_percent: float       
+    create_time: Optional[datetime] 
+
 @dataclass
 class LLMConfig:
     """Language Model settings"""
@@ -64,6 +81,7 @@ class SafetyConfig:
 class Config:
     """Main configuration"""
     audio: AudioConfig = field(default_factory=AudioConfig)
+    knownapps: KnownApps = field(default_factory= KnownApps)
     llm: LLMConfig = field(default_factory=LLMConfig)
     system: SystemConfig = field(default_factory=SystemConfig)
     memory: MemoryConfig = field(default_factory=MemoryConfig)
@@ -86,7 +104,12 @@ class Config:
                 for key, value in data['audio'].items():
                     if hasattr(config.audio, key):
                         setattr(config.audio, key, value)
-            
+            # Updating known apps config
+            if 'knownapps' in data:
+                for key, value in data['knownapps'].items():
+                    if hasattr(config.knownapps, key):
+                        setattr(config.knownapps, key, value)
+
             # Update llm config
             if 'llm' in data:
                 for key, value in data['llm'].items():
@@ -129,7 +152,9 @@ class Config:
                 'channels': self.audio.channels,
                 'compute_type': self.audio.compute_type,
                 'language': self.audio.language
-
+            }, 
+            'knownapps': {
+                'app_dir_file': self.knownapps.app_dir_file
             },
             'llm': {
                 'model_path': self.llm.model_path,

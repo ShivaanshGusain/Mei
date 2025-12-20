@@ -7,9 +7,6 @@ Run this directly: python test_transcriber.py
 import sys
 import time
 
-# Add your project to path if needed
-sys.path.insert(0, '.')
-
 from ...core.events import EventType, subscribe, get_event_bus
 from ...core.config import init_config
 from ...perception.audio.listener import AudioListener
@@ -52,7 +49,7 @@ def on_error(event):
     """Called on errors."""
     error = event.data.get('error', 'Unknown error')
     source = event.source
-    print(f"\n❌ ERROR from {source}: {error}")
+    print(f"\nERROR from {source}: {error}")
 
 
 def main():

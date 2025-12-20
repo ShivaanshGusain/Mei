@@ -72,7 +72,7 @@ class AudioListener:
                 self.rolling_buffer.append(chunk)
                 #calculating energy = 
                 energy = self.calculate_rms(chunk)
-                print(f"RMS: {energy:.4f}")  # Shows 4 decimal places
+                # print(f"RMS: {energy:.4f}")  # Shows 4 decimal places
 
                 if self.state == AgentState.IDLE:
                     if energy>self.threshold:

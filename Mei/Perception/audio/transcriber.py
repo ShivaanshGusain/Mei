@@ -16,12 +16,14 @@ class Transcriber:
         subscribe(EventType.SPEECH_ENDED, self._on_speech_ended)
         config = get_config()
         self.raw_path = config.audio.model_path.strip()
+
         if os.path.isabs(self.raw_path):
             self.raw_path = self.raw_path
         else:
             self.current_dir = os.path.dirname(os.path.abspath(__file__))
             self.current_dir = os.path.abspath(os.path.join(self.current_dir, "../../../"))
             self.model_path = os.path.join(self.current_dir,self.raw_path)
+
         self.rate = config.audio.sample_rate
         self.channel = config.audio.channels
         self.model = WhisperModel(model_size_or_path = self.model_path, device = config.audio.device,compute_type= config.audio.compute_type)
