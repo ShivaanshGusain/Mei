@@ -24,6 +24,8 @@ class EventType(Enum):
     SPEECH_STARTED = auto()
     SPEECH_ENDED = auto()
     COMMAND_RECEIVED = auto()
+    SPEECH_RECEIVED = auto()
+    TRANSCRIBE_COMPLETED = auto()
     
     # Understanding
     INTENT_RECOGNIZED = auto()

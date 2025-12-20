@@ -1,16 +1,14 @@
-from dataclasses import dataclass
 import pyaudio
 import threading
 import time
 from datetime import datetime
 from collections import deque
-from ...core.config import AudioConfig
 from ...core.state import AgentState
 import numpy as np
 from ...core import events
 from ...core.config import get_config
 
-CHUNK = 1024
+# CHUNK = 1024
 FORMAT = pyaudio.paInt16
 CHANNELS = 1
 
@@ -19,20 +17,21 @@ class AudioListener:
     def __init__(self): # for now removed threshold from parameters using Audioconfig.threshold
         config = get_config()
         self.threshold = config.audio.energy_threshold
-        self.silence_duration = config.audio.listen_timeout
+        self.silence_duration = config.audio.silence_duration
         self.sample_rate = config.audio.sample_rate
         self.state = AgentState.IDLE
         self.running = False
-        
-        
+        self.CHUNK = config.audio.chunk
+        self.channels = config.audio.channels
+
         pre_roll_seconds = 2.0
-        chunks_per_second = self.sample_rate / CHUNK
+        chunks_per_second = self.sample_rate / self.CHUNK
         max_chunks = int(pre_roll_seconds * chunks_per_second)
         self.rolling_buffer = deque(maxlen=max_chunks)
         
         
         self.pyaudio = pyaudio.PyAudio()
-        self.stream = self.pyaudio.open(format = pyaudio.paInt16, channels = 1, rate = self.sample_rate, input = True, frames_per_buffer= 1024)
+        self.stream = self.pyaudio.open(format = pyaudio.paInt16, channels = self.channels, rate = self.sample_rate, input = True, frames_per_buffer= 1024)
         self.speech_buffer = []
         self.silence_start_time = None
 
@@ -64,12 +63,11 @@ class AudioListener:
         chunk_array = np.frombuffer(chunk, dtype=np.int16).astype(np.float32)/32768.0
         rms_value = np.sqrt(np.mean(chunk_array**2))
         return rms_value
-    
 
     def _listen_loop(self):
         try:
             while self.running:
-                chunk = self.stream.read(CHUNK,exception_on_overflow=False)
+                chunk = self.stream.read(self.CHUNK,exception_on_overflow=False)
                 # Adding to the rolling buffer.
                 self.rolling_buffer.append(chunk)
                 #calculating energy = 

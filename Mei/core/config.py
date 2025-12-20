@@ -13,15 +13,19 @@ from pathlib import Path
 @dataclass
 class AudioConfig:
     """Audio/Speech settings"""
-    model_path: str = ""
-    device: str = "cpu"
+    model_path: str = r'models/whisper-model'
+    device: str = "cuda"
     sample_rate: int = 16000
     energy_threshold: int = 0.02
     wake_word: str = "mei"
-    listen_timeout: int = 5
+    #listen_timeout: int = 1 
     phrase_timeout: int = 10
-    silence_duration: int = 3
-
+    silence_duration: float = 1
+    chunk: int = 1024
+    channels: int = 1
+    compute_type: str = "int8"
+    language: str = 'en'
+    beam_size: int = 5
 @dataclass
 class LLMConfig:
     """Language Model settings"""
@@ -31,7 +35,6 @@ class LLMConfig:
     temperature: float = 0.1
     threads: int = 4
     gpu_layers: int = 0
-
 
 @dataclass
 class SystemConfig:
@@ -122,6 +125,11 @@ class Config:
                 'sample_rate': self.audio.sample_rate,
                 'energy_threshold': self.audio.energy_threshold,
                 'wake_word': self.audio.wake_word,
+                'chunk': self.audio.chunk,
+                'channels': self.audio.channels,
+                'compute_type': self.audio.compute_type,
+                'language': self.audio.language
+
             },
             'llm': {
                 'model_path': self.llm.model_path,
