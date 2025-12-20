@@ -8,7 +8,21 @@ class AppLibrary:
     def __init__(self, cache_file="known_apps.csv"):
         self.cache_file = cache_file
         self.apps = {}
-        self.load_cache()
+        self._load_cache_only()
+
+    def _load_cache_only(self):
+        if not os.path.exists(self.cache_file):
+            self.apps = {}
+            return
+        try:
+            with open(self.cache_file, mode='r', encoding='utf-8') as f:
+                reader = csv.reader(f)
+                for row in reader:
+                    if len(row) == 2:
+                        self.apps[row[0]] = row[1]
+        except Exception:
+            self.apps = {}
+
 
     def load_cache(self):
         """Loads apps from CSV. If missing or corrupted, runs a scan."""
@@ -266,11 +280,6 @@ class AppLibrary:
         for name, path in self.apps.items():
             if query in name:
                 return path
-        
-        # 3. Fuzzy Match
-        matches = get_close_matches(query, self.apps.keys(), n=1, cutoff=0.6)
-        if matches:
-            return self.apps[matches[0]]
         
         return None
 

@@ -48,7 +48,7 @@ class ProcessManager:
         result = []
         for process in psutil.process_iter(attrs=['pid','name','exe','status','memory_info','cpu_percent','create_time']):
             try:
-                if process.info.get("name", "") == name:
+                if process.info.get("name", "").lower() == name:
                     processed = self._build_process_info(process)
                     result.append(processed)
             except (psutil.AccessDenied, psutil.ZombieProcess, psutil.NoSuchProcess):
@@ -67,43 +67,65 @@ class ProcessManager:
         
     def launch(self, app_name: str) -> Optional[int]:
         path = self.app_library.get_path(app_name)
+
         if path is None:
+            print(f"[ProcessManager] '{app_name}' not in cache, scanning...")
             self.app_library.refresh_library()
-            path = self.app_library.get_path(app_name=app_name)
+            path = self.app_library.get_path(app_name)
             if path is None:
                 return None
+
+
         if not os.path.exists(path):
             return None
-        
         try:
-            process = subprocess.Popen(
-                [path],
-                shell= False,
-                start_new_session=True
-            )
-            pid = process.pid
-            emit(event_type=EventType.APP_LAUNCHED, source='ProcessManager', process= process.pid)
-            return pid
-        # except psutil.AccessDenied or psutil.ZombieProcess or psutil.NoSuchProcess:
-        #     return pid
-        except Exception as e:
-            emit(event_type=EventType.ERROR, source='ProcessManager')
+            # Get process count BEFORE launching
+            name_normalized = self._normalized_name(app_name)
+            existing_pids = {p.pid for p in self.find_all_processes(app_name)}
+            
+            # Launch
+            subprocess.Popen([path], shell=False, start_new_session=True)
+            
+            # Wait briefly for actual process to spawn
+            import time
+            time.sleep(1)
+            
+            # Find NEW process (not in existing_pids)
+            for proc in self.find_all_processes(app_name):
+                if proc.pid not in existing_pids:
+                    emit(event_type=EventType.APP_LAUNCHED, source='ProcessManager', pid=proc.pid)
+                    return proc.pid
+            
+            # Fallback: return any matching process
+            found = self.find_process(app_name)
+            if found:
+                return found.pid
+            
             return None
-    
+            
+        except Exception as e:
+            emit(event_type=EventType.ERROR, source='ProcessManager', error=str(e))
+            return None
+
     def terminate(self, pid: int) -> bool:
         try:
-            process = psutil.Process(pid=pid)
+            process = psutil.Process(pid)
             name = process.name()
+            print("hello")
+            print(name)
             process.terminate()
             process.wait(timeout=3)
             emit(event_type=EventType.APP_CLOSED, source='ProcessManager', name = name)
             return True
         except psutil.TimeoutExpired:
+            print("TE")
             process.kill()
             return True
         except psutil.NoSuchProcess:
+            print("NSP")
             return True
         except psutil.AccessDenied:
+            print("A")
             emit(event_type=EventType.ERROR, source = 'ProcessManager')
             return False
         
@@ -173,11 +195,12 @@ if __name__ == "__main__":
     print("TEST 4: Launch Notepad")
     print("=" * 50)
     pid = pm.launch("notepad")
+    print(pid)
     if pid:
         print(f"  Launched Notepad with PID: {pid}")
         
         import time
-        time.sleep(2)  # Let it open
+        time.sleep(6)  # Let it open
         
         print("\n" + "=" * 50)
         print("TEST 5: Terminate Notepad")
@@ -186,3 +209,4 @@ if __name__ == "__main__":
         print(f"  Terminated: {success}")
     else:
         print("  Failed to launch Notepad")
+        
