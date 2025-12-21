@@ -44,6 +44,40 @@ class ProcessInfo:
     create_time: Optional[datetime] 
 
 @dataclass
+class WindowInfo:
+    """Window Information from the OS"""
+    hwnd: int
+    title: str
+    process_name: str
+    pid: int
+    x: int
+    y: int
+    width: int
+    height: int
+    is_visible: bool
+    is_minimized: bool
+    is_maximized: bool
+
+@dataclass
+class TabInfo:
+    """Tab/child information ( for browsers, etc)"""
+    id: str
+    title: str
+    url: Optional[str]
+    is_active: bool
+    parent_hwnd: int
+    metadata: Dict[str, Any]
+
+@dataclass
+class ExtendedWindowInfo:
+    """Window info + deep app data when available"""
+    window: WindowInfo
+    tabs: List[TabInfo]
+    has_deep_access: bool
+    app_type: str
+    current_state: Dict[str, Any]
+    
+@dataclass
 class LLMConfig:
     """Language Model settings"""
     model_path: str = ""

@@ -9,8 +9,8 @@ from typing import List, Dict, Any, Optional
 from enum import Enum, auto
 from datetime import datetime
 import uuid
-
-
+from abc import ABC, abstractmethod
+from .config import TabInfo
 class TaskStatus(Enum):
     """Status of a task."""
     PENDING = auto()
@@ -47,7 +47,38 @@ class Intent:
     def __str__(self):
         return f"Intent({self.action}, target={self.target}, params={self.parameters})"
 
-
+class AppBridge(ABC):
+    @property
+    @abstractmethod
+    def app_type(self)-> str:
+        '''return app type: 'browser','explorer', etc...'''
+        pass
+    @property
+    @abstractmethod
+    def supported_process(self)->List[str]:
+        '''returns list of process names this handles,
+        eg: ['chrome.exe','firefox.exe']'''
+        pass
+    @property
+    @abstractmethod
+    def is_connected(self)->bool:
+        ''' Is the bridge active and connected,
+        eg: Returns true if websocket to extension is open.'''
+        pass
+    @abstractmethod
+    def get_tabs(self, hwnd:int)->List[TabInfo]:
+        '''Get tab/children for a window, returns a lit of tab info'''
+    @abstractmethod
+    def switch_to_tab(self, hwnd: int, tab_id: str)->bool:
+        ''' switch to specific tab'''
+        pass
+    ''' Optional '''
+    def close_tab(self, hwnd:int, tab_id:str)->bool:
+        '''closing a specific tab. Optional, default - False'''
+        return False
+    def navigate(self, hwnd:int, target:str)->bool:
+        '''Navigate to the target (url, folder, etc), Browser/Explorer go to path.'''
+        return False
 @dataclass
 class Step:
     """

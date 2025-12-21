@@ -46,6 +46,10 @@ class EventType(Enum):
     
     # System
     WINDOW_CHANGED = auto()
+    WINDOW_CLOSED = auto()
+    
+    TAB_CLOSED = auto()
+    TAB_OPENED = auto()
     APP_LAUNCHED = auto()
     APP_CLOSED = auto()
     

@@ -111,21 +111,16 @@ class ProcessManager:
         try:
             process = psutil.Process(pid)
             name = process.name()
-            print("hello")
-            print(name)
             process.terminate()
             process.wait(timeout=3)
             emit(event_type=EventType.APP_CLOSED, source='ProcessManager', name = name)
             return True
         except psutil.TimeoutExpired:
-            print("TE")
             process.kill()
             return True
         except psutil.NoSuchProcess:
-            print("NSP")
             return True
         except psutil.AccessDenied:
-            print("A")
             emit(event_type=EventType.ERROR, source = 'ProcessManager')
             return False
         
@@ -179,8 +174,8 @@ if __name__ == "__main__":
     print("\n" + "=" * 50)
     print("TEST 2: Check if brave is running")
     print("=" * 50)
-    is_chrome = pm.is_running("brave")
-    print(f"  Brave running: {is_chrome}")
+    is_brave = pm.is_running("brave")
+    print(f"  Brave running: {is_brave}")
     
     print("\n" + "=" * 50)
     print("TEST 3: Find Notepad process")
@@ -200,7 +195,7 @@ if __name__ == "__main__":
         print(f"  Launched Notepad with PID: {pid}")
         
         import time
-        time.sleep(6)  # Let it open
+        time.sleep(1)  # Let it open
         
         print("\n" + "=" * 50)
         print("TEST 5: Terminate Notepad")
