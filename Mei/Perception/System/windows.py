@@ -289,7 +289,8 @@ class WindowManager:
     def _get_most_recent(self, windows: List[WindowInfo]) -> Optional[WindowInfo]:
         for hwnd in self._focus_history:
             for window in windows:
-                return window
+                if window.hwnd == hwnd:
+                    return window
         return window[0] if window else None
      
     def _is_real_window(self, hwnd: int) -> bool:

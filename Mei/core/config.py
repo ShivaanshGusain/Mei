@@ -6,10 +6,10 @@ Single source of truth for all settings.
 import os
 import yaml
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 from pathlib import Path
 from datetime import datetime
-
+from enum import Enum
 @dataclass
 class AudioConfig:
     """Audio/Speech settings"""
@@ -77,6 +77,48 @@ class ExtendedWindowInfo:
     app_type: str
     current_state: Dict[str, Any]
     
+@dataclass 
+class UIElement:
+    name: str
+    control_type:str
+    automation_id: str
+    class_name: str
+    value: Optional[str]
+    is_enabled: bool
+    is_focused: bool
+    is_visible: bool
+
+    bounding_box: Tuple[int, int, int, int]
+    hwnd: int
+    depth: int
+    _control: Any = None
+
+class ControlType(Enum):
+    BUTTON = "Button"
+    EDIT = "Edit"
+    TEXT = "Text"
+    CHECKBOX = 'CheckBox'
+    RADIOBUTTON = "RadioButton"
+    COMBOBOX = "ComboBox"
+    LIST = "List"
+    MENU = "Menu"              
+    MENUITEM = "MenuItem"      
+    TAB = "Tab"                
+    TABITEM = "TabItem"        
+    TREE = "Tree"              
+    TREEITEM = "TreeItem"      
+    TOOLBAR = "ToolBar"        
+    STATUSBAR = "StatusBar"    
+    PANE = "Pane"              
+    WINDOW = "Window"          
+    DOCUMENT = "Document"      
+    HYPERLINK = "Hyperlink"    
+    IMAGE = "Image"            
+    SLIDER = "Slider"          
+    SPINNER = "Spinner"        
+    PROGRESSBAR = "ProgressBar"
+    GROUP = "Group" 
+
 @dataclass
 class LLMConfig:
     """Language Model settings"""
