@@ -119,6 +119,53 @@ class ControlType(Enum):
     PROGRESSBAR = "ProgressBar"
     GROUP = "Group" 
 
+@dataclass  
+class VisualConfig:
+    omniparser_model_path:str = "perception/Visual/OmniParser"
+    ocr_language:str = 'en'
+    screenshot_cache_dir: str = 'data/screenshots'
+    max_cache_size_mb: int = 100
+    enable_gpu: bool = True
+    detection_confidence_threshold:float = 0.5
+    ocr_confidence_threshold:float = 0.6
+    max_elements_per_analysis:int = 100
+
+@dataclass
+class MonitorInfo:
+    index: int
+    x:int
+    y:int
+    width:int
+    height:int
+    is_primary:bool
+    scale_factor: float = 1.0
+
+@dataclass
+class Screenshot:
+    image:Any
+    timestamp: datetime
+    region: Tuple[int,int,int,int]
+    source: str
+    source_hwnd:Optional[int] = None
+    monitor_index: Optional[int] = None
+
+@dataclass
+class VisualElement:
+    id:str
+    label:str
+    element_type:str
+    bounding_box:Tuple[int,int,int,int]
+    confidence:float
+    center: Tuple[int,int]
+    ocr_text: Optional[str] = None
+    attributes: Dict[str, Any] = field(default_factory=dict)
+
+@dataclass
+class ScreenDiff:
+    changed_regions: List[Tuple[int,int,int,int]]
+    similarity_score: float
+    has_significant_change: bool
+
 @dataclass
 class LLMConfig:
     """Language Model settings"""
@@ -162,7 +209,6 @@ class Config:
     system: SystemConfig = field(default_factory=SystemConfig)
     memory: MemoryConfig = field(default_factory=MemoryConfig)
     safety: SafetyConfig = field(default_factory=SafetyConfig)
-    
     debug: bool = False
     log_level: str = "INFO"
     
