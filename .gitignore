@@ -11,3 +11,10 @@ __pycache__
 Dolphin3.0-Llama3.1-8B-exl2
 Learning
 models
+\Mei\perception\Visual\OmniParser
+*.safetensors
+*.pt
+*.bin
+*.onnx
+weights/
+saved_models/
