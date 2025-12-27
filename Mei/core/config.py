@@ -122,7 +122,6 @@ class ControlType(Enum):
 
 @dataclass  
 class VisualConfig:
-    omniparser_model_path:str = "perception/Visual/OmniParser/weights"
     caption_model_name: str = "florence2"
     box_threshold: float = 0.01
     iou_threshold: float = 0.7
@@ -131,8 +130,6 @@ class VisualConfig:
     max_elements_per_analysis:int = 100
     enable_gpu: bool = True
 
-    icon_detect_model: str = "perception/Visual/OmniParser/weights/icon_detect/model.pt"
-    icon_caption_model: str = "perception/Visual/OmniParser/weights/icon_caption"
     ocr_language:str = 'en'
     screenshot_cache_dir: str = 'data/screenshots'
     max_cache_size_mb: int = 100
