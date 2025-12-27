@@ -1,5 +1,5 @@
-from ...core.config import get_config, MonitorInfo, Screenshot, UIElement, ScreenDiff, VisualConfig
-from ...core.events import emit
+from ...core.config import get_config, MonitorInfo, Screenshot, UIElement, ScreenDiff
+from ...core.events import emit, EventType
 from typing import List,Optional, Tuple
 import mss, os, ctypes
 from datetime import datetime
@@ -13,7 +13,7 @@ class ScreenCapture:
         self._sct = mss.mss()
         self._monitors:List[MonitorInfo] = []
         self._refresh_monitors()
-        os.makedirs(VisualConfig.screenshot_cache_dir, exist_ok= True)
+        os.makedirs(self.config.visual.screenshot_cache_dir, exist_ok= True)
 
     def _refresh_monitors(self)->None:
         self._monitors = []
@@ -25,12 +25,12 @@ class ScreenCapture:
                 width =mon['width'],
                 height = mon['height'],
                 is_primary=(i==0),
-                scale_factor=self._get_dip_scale(i)
+                scale_factor=self._get_dpi_scale(i)
             )
             self._monitors.append(monitor_info)
-        
+        emit(event_type= EventType.MONITOR_REFRESHED, source="ScreenCapture")
     
-    def _get_dip_scale(self, monitor_index: int)->float:
+    def _get_dpi_scale(self, monitor_index: int)->float:
         try:
             ctypes.windll.shcore.SetProcessDpiAwareness(2)
         except:
@@ -49,103 +49,123 @@ class ScreenCapture:
                 return monitor
         return self._monitors[0] if self._monitors else None
     
-    def capture_full_screen(self, monitor_index:int = None)-> Screenshot:
-        if monitor_index is None:
-            mss_index = 0
-        else:
-            mss_index = monitor_index +1 
-        monitor = self._sct.monitors[mss_index]
-        sct_img = self._sct.grab(monitor)
+    def capture_full_screen(self, monitor_index:int = None)-> Optional[Screenshot]:
+        try:
+            if monitor_index is None:
+                mss_index = 0
+            else:
+                mss_index = monitor_index +1 
+            monitor = self._sct.monitors[mss_index]
+            sct_img = self._sct.grab(monitor)
 
-        img = Image.frombytes('RGB', (sct_img.width,sct_img.height), sct_img.rgb)
-        return Screenshot(
-            image=img,
-            timestamp=datetime.now(),
-            region=(monitor['left'],monitor['top'],monitor['width'],monitor['height']),
-            source="screen",
-            source_hwnd=None,
-            monitor_index=monitor_index
-        )
-    
-    def capture_region(self,x:int, y:int,width:int, height:int)->Screenshot:
-        region = {
-            'left':x,
-            'top':y,
-            'width':width,
-            'height':height
-        }
-        sct_image = self._sct.grab(region)
-        img = Image.frombytes("RGB",(sct_image.width, sct_image.height),sct_image.rgb)
-        return Screenshot(
-            image=img,
-            timestamp=datetime.now(),
-            region=(x,y,width,height),
-            source='region',
-            source_hwnd= None,
-            monitor_index=None
-        )
-    
-    def capture_window(self,hwnd:int, include_border:bool = True, bring_to_front:bool = False)->Optional[Screenshot]:
-        if win32gui.IsIconic(hwnd):
-            return self._capture_minimized_window(hwnd)
-        if bring_to_front:
-            win32gui.ShowWindow(hwnd,win32con.SW_RESTORE)
-            win32gui.SetForegroundWindow(hwnd)
-            time.sleep(0.1)
+            img = Image.frombytes('RGB', (sct_img.width,sct_img.height), sct_img.rgb)
             
-        if include_border:
-            rect = win32gui.GetWindowRect(hwnd)
-        else:
-            client_rect = win32gui.GetClientRect(hwnd)
-            left,top = win32gui.ClientToScreen(hwnd,(0,0))
-            rect = (left, top, left + client_rect[2], top + client_rect[3])
-        x,y,x2,y2 = rect
-        width = x2-x
-        height = y2-y
+            S =  Screenshot(
+                image=img,
+                timestamp=datetime.now(),
+                region=(monitor['left'],monitor['top'],monitor['width'],monitor['height']),
+                source="screen",
+                source_hwnd=None,
+                monitor_index=monitor_index
+            )
+            emit(event_type=EventType.MONITOR_SCREENSHOT, source="ScreenCapture", screenshot = S)
+            return S
+        except:
+            emit(event_type=EventType.ERROR, source="ScreenCapture")
 
-        if width <=0 or height <=0:
-            return None
-        screenshot = self.capture_region(x,y,width,height)
-        screenshot.source = "window"
-        screenshot.source_hwnd = hwnd
-        return screenshot
-    
+    def capture_region(self,x:int, y:int,width:int, height:int)->Optional[Screenshot]:
+        try:
+            region = {
+                'left':x,
+                'top':y,
+                'width':width,
+                'height':height
+            }
+            sct_image = self._sct.grab(region)
+            img = Image.frombytes("RGB",(sct_image.width, sct_image.height),sct_image.rgb)
+            S = Screenshot(
+                image=img,
+                timestamp=datetime.now(),
+                region=(x,y,width,height),
+                source='region',
+                source_hwnd= None,
+                monitor_index=None
+            )
+            emit(EventType.REGION_SCREENSHOT, source="ScreenCapture", screenshot = S)
+            return S
+        except:
+            emit(event_type=EventType.ERROR, source="ScreenCapture")
+
+    def capture_window(self,hwnd:int, include_border:bool = True, bring_to_front:bool = False)->Optional[Screenshot]:
+        try:
+            if win32gui.IsIconic(hwnd):
+                return self._capture_minimized_window(hwnd)
+            if bring_to_front:
+                win32gui.ShowWindow(hwnd,win32con.SW_RESTORE)
+                win32gui.SetForegroundWindow(hwnd)
+                time.sleep(0.1)
+                
+            if include_border:
+                rect = win32gui.GetWindowRect(hwnd)
+            else:
+                client_rect = win32gui.GetClientRect(hwnd)
+                left,top = win32gui.ClientToScreen(hwnd,(0,0))
+                rect = (left, top, left + client_rect[2], top + client_rect[3])
+            x,y,x2,y2 = rect
+            width = x2-x
+            height = y2-y
+
+            if width <=0 or height <=0:
+                return None
+            screenshot = self.capture_region(x,y,width,height)
+            screenshot.source = "window"
+            screenshot.source_hwnd = hwnd
+            emit(EventType.WINDOW_CAPTURED, source="ScreenCapture", screenshot = screenshot)
+            return screenshot
+        except:
+            emit(event_type=EventType.ERROR, source='ScreenCapture')
+            
     def _capture_minimized_window(self, hwnd:int)->Optional[Screenshot]:
-        rect = win32gui.GetWindowRect(hwnd)
-        width = rect[2] - rect[0]
-        height = rect[3] - rect[1]
-        if width <=0 or height <=0:
-            return None
-        hwnd_dc = win32gui.GetWindowDC(hwnd)
-        mfc_dc = win32ui.CreateDCFromHandle(hwnd_dc)
-        save_dc = mfc_dc.CreateCompatibleDC()
+        try:
+            rect = win32gui.GetWindowRect(hwnd)
+            width = rect[2] - rect[0]
+            height = rect[3] - rect[1]
+            if width <=0 or height <=0:
+                return None
+            hwnd_dc = win32gui.GetWindowDC(hwnd)
+            mfc_dc = win32ui.CreateDCFromHandle(hwnd_dc)
+            save_dc = mfc_dc.CreateCompatibleDC()
 
-        bitmap = win32ui.CreateBitmap()
-        bitmap.CreateCompatibleBitmap(mfc_dc, width,height)
-        save_dc.SelectObject(bitmap)
-        
-        PW_RENDERFULLCONTENT  = 2
-        result = ctypes.windll.user32.PrintWindow(
-            hwnd, save_dc.GetSafeHdc(),PW_RENDERFULLCONTENT
-        )
-        bmp_info = bitmap.GetInfo()
-        bmp_bits = bitmap.GetBitmapBits(True)
-        
-        img = Image.frombuffer(
-            'RGB', (bmp_info['bmWidth'], bmp_info['bmHeight']), bmp_bits,'raw','BGRX', 0,1
-        )
-        win32gui.DeleteObject(bitmap.GetHandle())
-        save_dc.DeleteDC()
-        mfc_dc.DeleteDC()
-        win32gui.ReleaseDC(hwnd, hwnd_dc)
-        return Screenshot(image=img,
-                          timestamp= datetime.now(),
-                          region=(rect[0], rect[1], width, height),
-                          source='window',
-                          source_hwnd=hwnd,
-                          monitor_index=None
-        )
-    
+            bitmap = win32ui.CreateBitmap()
+            bitmap.CreateCompatibleBitmap(mfc_dc, width,height)
+            save_dc.SelectObject(bitmap)
+            
+            PW_RENDERFULLCONTENT  = 2
+            result = ctypes.windll.user32.PrintWindow(
+                hwnd, save_dc.GetSafeHdc(),PW_RENDERFULLCONTENT
+            )
+            bmp_info = bitmap.GetInfo()
+            bmp_bits = bitmap.GetBitmapBits(True)
+            
+            img = Image.frombuffer(
+                'RGB', (bmp_info['bmWidth'], bmp_info['bmHeight']), bmp_bits,'raw','BGRX', 0,1
+            )
+            win32gui.DeleteObject(bitmap.GetHandle())
+            save_dc.DeleteDC()
+            mfc_dc.DeleteDC()
+            win32gui.ReleaseDC(hwnd, hwnd_dc)
+            S =  Screenshot(image=img,
+                            timestamp= datetime.now(),
+                            region=(rect[0], rect[1], width, height),
+                            source='window',
+                            source_hwnd=hwnd,
+                            monitor_index=None
+            )
+            emit(EventType.WINDOW_CAPTURED, source="ScreenCapture", screenshot = S)
+            return S
+        except:
+            emit(event_type=EventType.ERROR, source="ScreenCapture")
+
     def capture_element(self, element:UIElement, padding: int = 0)->Optional[Screenshot]:
         x, y, w, h = element.bounding_box
         x = max(0,x-padding)
@@ -169,28 +189,34 @@ class ScreenCapture:
             return self.capture_window(hwnd)
         return None
     
-    def compare_screenshots(self, before:Screenshot,after:Screenshot, threshold:float = 0.95)->ScreenDiff:
-        img_before = before.image
-        img_after = after.image
-        if img_before.size != img_after.size:
-            img_after = img_after.resize(img_before.size)
+    def compare_screenshots(self, before:Screenshot,after:Screenshot, threshold:float = 0.95)->Optional[ScreenDiff]:
+        try:
+            img_before = before.image
+            img_after = after.image
+            if img_before.size != img_after.size:
+                img_after = img_after.resize(img_before.size)
 
-        arr_before = np.array(img_before)
-        arr_after = np.array(img_after)
-        diff = np.abs(arr_before.astype(np.int16)-arr_after.astype(np.int16))
-        diff_sum = np.sum(diff, axis = 2)
-        changed_mask = diff_sum >30
-        changed_regions = self._find_changed_regions(changed_mask)
-        
-        total_pixels = arr_before.shape[0] * arr_before.shape[1] 
-        changed_pixels = np.sum(changed_mask)
-        similarity = 1.0-(changed_pixels/total_pixels)
+            arr_before = np.array(img_before)
+            arr_after = np.array(img_after)
+            diff = np.abs(arr_before.astype(np.int16)-arr_after.astype(np.int16))
+            diff_sum = np.sum(diff, axis = 2)
+            changed_mask = diff_sum >30
+            changed_regions = self._find_changed_regions(changed_mask)
+            
+            total_pixels = arr_before.shape[0] * arr_before.shape[1] 
+            changed_pixels = np.sum(changed_mask)
+            similarity = 1.0-(changed_pixels/total_pixels)
 
-        return ScreenDiff(
-            changed_regions=changed_regions,
-            similarity_score=similarity,
-            has_significant_change=(similarity<threshold)
-        )
+            S = ScreenDiff(
+                changed_regions=changed_regions,
+                similarity_score=similarity,
+                has_significant_change=(similarity<threshold)
+            )
+            emit(event_type=EventType.SCREENSHOT_COMPARED, source="ScreenCapture", data = S)
+            return S
+        except:
+            emit(event_type=EventType.ERROR, source="ScreenCapture")
+    
     
     def _find_changed_regions(self,mask:np.ndarray)->List[Tuple[int,int,int,int]]:
         rows,cols = np.where(mask)
@@ -200,15 +226,19 @@ class ScreenCapture:
         min_col, max_col = cols.min(), cols.max()
         return [(min_col, min_row, max_col-min_col, max_row-min_row)]
     
-    def save_screenshot(self, screenshot:Screenshot, path:str = None)->str:
-        if path == None:
-            timestamp_str = screenshot.timestamp.strftime("%Y%m%d_%H%M%S_%f")
-            filename = f'screenshot_{timestamp_str}.png'
-            path = os.path.join(VisualConfig.screenshot_cache_dir, filename)
-        
-        os.makedirs(os.path.dirname(path), exist_ok = True)
-        screenshot.image.save(path, format='PNG')
-        return path
+    def save_screenshot(self, screenshot:Screenshot, path:str = None)->Optional[str]:
+        try:
+            if path == None:
+                timestamp_str = screenshot.timestamp.strftime("%Y%m%d_%H%M%S_%f")
+                filename = f'screenshot_{timestamp_str}.png'
+                path = os.path.join(self.config.visual.screenshot_cache_dir, filename)
+            
+            os.makedirs(os.path.dirname(path), exist_ok = True)
+            screenshot.image.save(path, format='PNG')
+            emit(event_type=EventType.SCREENSHOT_SAVED, source="ScreenCapture", data = path)
+            return path
+        except:
+            emit(event_type=EventType.ERROR, source="ScreenCapture")
 
     def load_screenshot(self, path:str)->Optional[Screenshot]:
         if not os.path.exists(path):
@@ -229,7 +259,7 @@ class ScreenCapture:
         now = datetime.now()
         max_age_seconds = max_age_hours*3600
         delete_count = 0
-        cache_dir = VisualConfig.screenshot_cache_dir
+        cache_dir = self.config.visual.screenshot_cache_dir
         for filename in os.listdir(cache_dir):
             filepath = os.path.join(cache_dir, filename)
             if not os.path.isfile(filepath):
@@ -300,8 +330,9 @@ if __name__ == "__main__":
     print("\n" + "=" * 50)                                        
     print("TEST 6: Capture Around Cursor")                        
     print("=" * 50)                                               
-    cursor_ss = sc.capture_around_cursor(50, 50)                
+    cursor_ss = sc.capture_around_cursor(sc.config.visual.region_around_cursor[0], sc.config.visual.region_around_cursor[1])                
     print(f"  Size: {cursor_ss.image.size}")                      
-                                                                  
+    path = sc.save_screenshot(cursor_ss)
+    print(path)                                         
     print("\nAll tests completed!")                               
                                                                   

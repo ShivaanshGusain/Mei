@@ -7,7 +7,6 @@ from collections import deque
 import queue
 from faster_whisper import WhisperModel
 from ...core.config import get_config
-# from ...core.state import
 from ...core.events import EventType, subscribe, emit
 
 

@@ -10,6 +10,7 @@ from typing import Optional, List, Dict, Any, Tuple
 from pathlib import Path
 from datetime import datetime
 from enum import Enum
+from PIL import Image
 @dataclass
 class AudioConfig:
     """Audio/Speech settings"""
@@ -121,14 +122,24 @@ class ControlType(Enum):
 
 @dataclass  
 class VisualConfig:
-    omniparser_model_path:str = "perception/Visual/OmniParser"
+    omniparser_model_path:str = "perception/Visual/OmniParser/weights"
+    caption_model_name: str = "florence2"
+    box_threshold: float = 0.01
+    iou_threshold: float = 0.7
+    use_local_semantics:bool = True
+    detection_confidence_threshold:float = 0.05
+    max_elements_per_analysis:int = 100
+    enable_gpu: bool = True
+
+    icon_detect_model: str = "perception/Visual/OmniParser/weights/icon_detect/model.pt"
+    icon_caption_model: str = "perception/Visual/OmniParser/weights/icon_caption"
     ocr_language:str = 'en'
     screenshot_cache_dir: str = 'data/screenshots'
     max_cache_size_mb: int = 100
-    enable_gpu: bool = True
-    detection_confidence_threshold:float = 0.5
+    
     ocr_confidence_threshold:float = 0.6
-    max_elements_per_analysis:int = 100
+    
+    region_around_cursor:List[int] = field(default_factory=lambda:[300,300])
 
 @dataclass
 class MonitorInfo:
@@ -165,6 +176,16 @@ class ScreenDiff:
     changed_regions: List[Tuple[int,int,int,int]]
     similarity_score: float
     has_significant_change: bool
+
+@dataclass
+class VisualAnalysisResult:
+    screenshot: Screenshot
+    elements: List[VisualElement]
+    text_content: str
+    analysis_time_ms: float
+    model_used:str
+    confidence_threshold: float
+    annotated_image: Optional[Image.Image] = None
 
 @dataclass
 class LLMConfig:
@@ -211,6 +232,7 @@ class Config:
     safety: SafetyConfig = field(default_factory=SafetyConfig)
     debug: bool = False
     log_level: str = "INFO"
+    visual: VisualConfig = field(default_factory=VisualConfig)
     
     @classmethod
     def load(cls, path: str = "config.yaml") -> "Config":
@@ -231,7 +253,7 @@ class Config:
                 for key, value in data['knownapps'].items():
                     if hasattr(config.knownapps, key):
                         setattr(config.knownapps, key, value)
-
+                    
             # Update llm config
             if 'llm' in data:
                 for key, value in data['llm'].items():

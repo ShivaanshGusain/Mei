@@ -27,6 +27,24 @@ class EventType(Enum):
     SPEECH_RECEIVED = auto()
     TRANSCRIBE_COMPLETED = auto()
     
+    # Screen
+    MONITOR_REFRESHED = auto()
+    MONITOR_SCREENSHOT = auto()
+    REGION_SCREENSHOT = auto()
+    WINDOW_CAPTURED = auto()
+    SCREENSHOT_COMPARED = auto()
+    SCREENSHOT_SAVED = auto()
+
+    # Visual Analysis
+    VISUAL_ANALYSIS_STARTED = auto()
+    VISUAL_ANALYSIS_COMPLETED = auto()
+    VISUAL_ELEMENT_FOUND = auto()
+    VISUAL_ELEMENT_NOT_FOUND = auto()
+    VISUAL_TEXT_EXTRACTED = auto()
+    OMNIPARSER_LOADED = auto()
+    OMNIPARSER_ERROR = auto()
+    OCR_COMPLETED = auto()
+    OMNIPARSER_UNLOADED = auto()
     # Understanding
     INTENT_RECOGNIZED = auto()
     ENTITIES_EXTRACTED = auto()
