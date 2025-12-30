@@ -45,6 +45,11 @@ class EventType(Enum):
     OMNIPARSER_ERROR = auto()
     OCR_COMPLETED = auto()
     OMNIPARSER_UNLOADED = auto()
+    
+    #LLM
+    LLM_LOADING = auto()
+    LLM_LOADED = auto()
+    LLM_UNLOADED = auto()
     # Understanding
     INTENT_RECOGNIZED = auto()
     ENTITIES_EXTRACTED = auto()

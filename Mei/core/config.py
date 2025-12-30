@@ -11,6 +11,10 @@ from pathlib import Path
 from datetime import datetime
 from enum import Enum
 from PIL import Image
+
+ROOT_DIR = Path(__file__).parent.parent.parent
+
+
 @dataclass
 class AudioConfig:
     """Audio/Speech settings"""
@@ -187,8 +191,8 @@ class VisualAnalysisResult:
 @dataclass
 class LLMConfig:
     """Language Model settings"""
-    model_path: str = ""
-    context_length: int = 4096
+    model_path: str = str(Path(__file__).parent.parent.parent /"models"/"qwen2.5-3b-instruct-q4_k_m.gguf")
+    context_length = 4096
     max_tokens: int = 512
     temperature: float = 0.1
     threads: int = 4
@@ -230,7 +234,8 @@ class Config:
     debug: bool = False
     log_level: str = "INFO"
     visual: VisualConfig = field(default_factory=VisualConfig)
-    
+    root_dir: Path= ROOT_DIR
+
     @classmethod
     def load(cls, path: str = "config.yaml") -> "Config":
         """Load configuration from YAML file."""
