@@ -30,26 +30,30 @@ Respond with JSON only:
 {"action":"...","target":"...","parameters":{...}}
 
 Examples:
-User: "open chrome"
-{"action":"open","target":"chrome","parameters":{}}
+APP CONTROL:
+"open chrome" → {"action": "open", "target": "chrome", "parameters": {}}
+"close notepad" → {"action": "close", "target": "notepad", "parameters": {}}
+"launch spotify" → {"action": "open", "target": "spotify", "parameters": {}}
 
-User: "search for cats on youtube"
-{"action":"search","target":"youtube","parameters":{"query":"cats"}}
+WINDOW CONTROL:
+"minimize this" → {"action": "minimize", "target": "current", "parameters": {}}
+"switch to firefox" → {"action": "focus", "target": "firefox", "parameters": {}}
+"maximize the window" → {"action": "maximize", "target": "current", "parameters": {}}
 
-User: "type hello world"
-{"action":"type","target":null, "parameters":{"text":"hello world"}}
+SEARCH/NAVIGATE:
+"search cats on youtube" → {"action": "search", "target": "youtube", "parameters": {"query": "cats"}}
+"go to google.com" → {"action": "navigate", "target": "browser", "parameters": {"url": "google.com"}}
+"find python tutorials" → {"action": "search", "target": null, "parameters": {"query": "python tutorials"}}
 
-User: "open the folder pictures"
-{"action":"open","target":"folder","parameters":{"folder":"pictures"}}
+FILE OPERATIONS:
+"open pictures folder" → {"action": "open", "target": "folder", "parameters": {"path": "pictures"}}
+"create new file" → {"action": "create", "target": "file", "parameters": {"name": null}}
+"create file report.txt in documents" → {"action": "create", "target": "file", "parameters": {"name": "report.txt", "location": "documents"}}
 
-User: "open the file image.png"
-{"action":"open","target":"file","parameters":{"file":"image.png"}}
-
-User: "close the current window"
-{"action":"close", "target":"current","parameters":{}}
-
-User: "switch to notepad"
-{"action":"focus","target":"notepad","parameters":{}}
+INPUT:
+"type hello world" → {"action": "type", "target": null, "parameters": {"text": "hello world"}}
+"press control c" → {"action": "hotkey", "target": null, "parameters": {"keys": ["ctrl", "c"]}}
+"scroll down" → {"action": "scroll", "target": null, "parameters": {"direction": "down"}}
 """
 
 
@@ -165,6 +169,7 @@ if __name__ =="__main__":
     extractor = IntentExtractor(auto_subscribe=False)
     
     test_commands = [
+        "create a folder on the current open window",
         "open the folder pictures",
         "open chrome",
         "search for cats on youtube",

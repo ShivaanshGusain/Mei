@@ -196,7 +196,7 @@ class LLMConfig:
     max_tokens: int = 512
     temperature: float = 0.1
     threads: int = 4
-    gpu_layers: int = 0
+    gpu_layers: int = -1
 
 @dataclass
 class SystemConfig:
