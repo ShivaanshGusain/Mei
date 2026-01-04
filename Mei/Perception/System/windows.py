@@ -321,32 +321,10 @@ class WindowManager:
         
         return True
     
-if __name__ == '__main__':
-    wm = WindowManager()
-    windows = wm.get_all_windows()
-    for w in windows[:10]:
-        print(f"[{w.hwnd}] {w.title[:40]} | {w.process_name}")
-    fg = wm.get_foreground_window()
-    if fg:
-        print(f"{fg.title}")
-        print(f"{fg.process_name}")
-        print(f"{fg.width}X{fg.height}")
-    
-    notepad = wm.find_window("notepad")
-    if notepad:
-        print(f"{notepad.title}")
-        print(f"{notepad.hwnd}")
-        wm.close_window(notepad.hwnd)
-    else:
-        print("Notepad not found")
-    
-    if fg:
-        import time
-        print("Minimizing in 2 seconds")
-        time.sleep(2)
-        wm.minimize_window(fg.hwnd)
-        print("minimized")
-        time.sleep(2)
-        wm.restore_window(fg.hwnd)
-        wm.focus_window(fg.hwnd)
-        print("restored")
+_window_manager_instance: Optional[WindowManager] = None
+
+def get_window_manager() -> WindowManager:
+    global _window_manager_instance
+    if _window_manager_instance is None:
+        _window_manager_instance = WindowManager()
+    return _window_manager_instance

@@ -156,52 +156,11 @@ class ProcessManager:
             create_time = datetime.fromtimestamp(create_time)
         process = ProcessInfo(pid,name,path,status, memory_info, memory_mb, cpu_percent, create_time)
         return process
-    
 
+_process_manager_instance: Optional[ProcessManager] = None
 
-# At the end of processes.py
-
-if __name__ == "__main__":
-    pm = ProcessManager()
-    
-    print("\n" + "=" * 50)
-    print("TEST 1: List Running Processes (first 10)")
-    print("=" * 50)
-    processes = pm.get_running_processes()[:10]
-    for p in processes:
-        print(f"  PID:{p.pid:6} | {p.name:25} | {p.memory_mb:.1f}MB")
-    
-    print("\n" + "=" * 50)
-    print("TEST 2: Check if brave is running")
-    print("=" * 50)
-    is_brave = pm.is_running("brave")
-    print(f"  Brave running: {is_brave}")
-    
-    print("\n" + "=" * 50)
-    print("TEST 3: Find Notepad process")
-    print("=" * 50)
-    notepad = pm.find_process("notepad")
-    if notepad:
-        print(f"  Found: PID={notepad.pid}, Path={notepad.path}")
-    else:
-        print("  Notepad not running")
-    
-    print("\n" + "=" * 50)
-    print("TEST 4: Launch Notepad")
-    print("=" * 50)
-    pid = pm.launch("notepad")
-    print(pid)
-    if pid:
-        print(f"  Launched Notepad with PID: {pid}")
-        
-        import time
-        time.sleep(1)  # Let it open
-        
-        print("\n" + "=" * 50)
-        print("TEST 5: Terminate Notepad")
-        print("=" * 50)
-        success = pm.terminate(pid)
-        print(f"  Terminated: {success}")
-    else:
-        print("  Failed to launch Notepad")
-        
+def get_process_manager() -> ProcessManager:
+    global _process_manager_instance
+    if _process_manager_instance is None:
+        _process_manager_instance = ProcessManager()
+    return _process_manager_instance

@@ -63,6 +63,18 @@ class EventType(Enum):
     PLAN_FAILED = auto()
     
     # Execution
+    
+    STEP_VERIFIED = auto()
+    STEP_VERIFICATION_FAILED = auto()
+    GOAL_VERIFIED = auto()
+    GOAL_VERIFICATION_FAILED = auto()
+    CONFIRMATION_PENDING = auto()
+    CONFIRMATION_TIMEOUT = auto()
+    GOAL_CONFIRMED = auto()
+    GOAL_REJECTED = auto()
+    MEMORY_PLAN_FOUND = auto()
+    MEMORY_PLAN_NOT_FOUND = auto()
+
     ACTION_STARTED = auto()
     ACTION_COMPLETED = auto()
     ACTION_FAILED = auto()

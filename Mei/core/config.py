@@ -11,7 +11,7 @@ from pathlib import Path
 from datetime import datetime
 from enum import Enum
 from PIL import Image
-
+from .task import Intent, Plan
 ROOT_DIR = Path(__file__).parent.parent.parent
 
 
@@ -199,6 +199,44 @@ class LLMConfig:
     gpu_layers: int = -1
 
 @dataclass
+class ActionResult:
+    success:bool
+    data: Dict[str,Any] 
+    error:Optional[str]
+    method_used: str   
+
+@dataclass
+class VerifyResult:
+    verified: bool
+    confidence:float
+    reason: Optional[str]
+
+@dataclass
+class GoalVerifyResult:
+    achieved: bool
+    confidence:float
+    reason: Optional[str]
+    evidence: Dict[str, Any]
+
+
+@dataclass
+class ElementReference:
+     source: str
+     bounding_box: Tuple[int,int,int,int]
+     ui_element: Optional[Any]
+     found_at: datetime = field(default_factory=datetime.now)
+
+
+@dataclass
+class PendingConfirmation:
+    plan: Plan
+    intent: Intent
+    goal_result: GoalVerifyResult
+    started_at: datetime
+    time_seconds: float
+
+
+@dataclass
 class SystemConfig:
     """System integration settings"""
     multi_monitor: bool = True
@@ -221,6 +259,12 @@ class SafetyConfig:
     blocked_apps: List[str] = field(default_factory=lambda: ["regedit.exe", "cmd.exe"])
     max_actions_per_minute: int = 60
 
+@dataclass
+class VerificationConfig:
+    goal_confidence_threshold: float = 0.6
+    step_confidence_threshold: float = 0.5
+    element_staleness_seconds: float = 5.0
+    confirmation_timeout_seconds: float = 5.0
 
 @dataclass
 class Config:
@@ -234,6 +278,7 @@ class Config:
     debug: bool = False
     log_level: str = "INFO"
     visual: VisualConfig = field(default_factory=VisualConfig)
+    verification: VerificationConfig = field(default_factory=VerificationConfig)
     root_dir: Path= ROOT_DIR
 
     @classmethod
