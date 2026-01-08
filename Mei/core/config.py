@@ -201,31 +201,34 @@ class LLMConfig:
 @dataclass
 class ActionResult:
     success:bool
-    data: Dict[str,Any] 
-    error:Optional[str]
-    method_used: str   
+    data: Dict[str,Any]  = field(default_factory= dict)
+    error:Optional[str] = None
+    method_used: str   = 'unknown'
 
 @dataclass
 class VerifyResult:
     verified: bool
-    confidence:float
-    reason: Optional[str]
+    confidence: float = 1.0  
+    reason: Optional[str] = None
 
 @dataclass
 class GoalVerifyResult:
     achieved: bool
-    confidence:float
-    reason: Optional[str]
-    evidence: Dict[str, Any]
-
+    confidence: float = 0.0
+    reason: Optional[str] = None
+    evidence: Dict[str, Any] = field(default_factory=dict)
 
 @dataclass
 class ElementReference:
-     source: str
-     bounding_box: Tuple[int,int,int,int]
-     ui_element: Optional[Any]
-     found_at: datetime = field(default_factory=datetime.now)
-
+    source: str 
+    bounding_box: Tuple[int, int, int, int]
+    ui_element: Optional[Any] = None 
+    visual_element: Optional[Any] = None 
+    found_at: datetime = field(default_factory=datetime.now)
+    
+    def is_stale(self, max_age_seconds: float = 2.0) -> bool:
+        age = (datetime.now() - self.found_at).total_seconds()
+        return age > max_age_seconds    
 
 @dataclass
 class PendingConfirmation:
@@ -233,7 +236,7 @@ class PendingConfirmation:
     intent: Intent
     goal_result: GoalVerifyResult
     started_at: datetime
-    time_seconds: float
+    timeout_seconds: float = 5.0 
 
 
 @dataclass
