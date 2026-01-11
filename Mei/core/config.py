@@ -6,12 +6,13 @@ Single source of truth for all settings.
 import os
 import yaml
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Optional, List, Dict, Any, Tuple,TYPE_CHECKING
 from pathlib import Path
 from datetime import datetime
 from enum import Enum
 from PIL import Image
-from .task import Intent, Plan
+if TYPE_CHECKING:
+    from .task import Intent, Plan
 ROOT_DIR = Path(__file__).parent.parent.parent
 
 
@@ -232,8 +233,8 @@ class ElementReference:
 
 @dataclass
 class PendingConfirmation:
-    plan: Plan
-    intent: Intent
+    plan: 'Plan'
+    intent: 'Intent'
     goal_result: GoalVerifyResult
     started_at: datetime
     timeout_seconds: float = 5.0 

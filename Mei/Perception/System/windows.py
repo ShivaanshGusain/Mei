@@ -114,6 +114,13 @@ class WindowManager:
         all_windows = self.get_all_windows()
         matches = []
         for window in all_windows:
+            proc_name_clean = window.process_name.lower().replace(".exe", "")
+            if query in proc_name_clean:
+                matches.insert(0, window)
+                continue
+            if query in proc_name_clean:
+                matches.append(window)
+                continue
             if query in window.title.lower():
                 matches.append(window)
         return matches
@@ -291,7 +298,7 @@ class WindowManager:
             for window in windows:
                 if window.hwnd == hwnd:
                     return window
-        return window[0] if window else None
+        return windows[0] if windows else None
      
     def _is_real_window(self, hwnd: int) -> bool:
         # Must be visible

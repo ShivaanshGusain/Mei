@@ -6,8 +6,7 @@ from datetime import datetime
 import uuid
 from abc import ABC, abstractmethod
 from .config import TabInfo
-if TYPE_CHECKING:
-    from .config import ActionResult, VerifyResult
+from .config import ActionResult, VerifyResult
 class TaskStatus(Enum):
     """Status of a task."""
     PENDING = auto()
@@ -88,7 +87,7 @@ class ActionHandler(ABC):
             "maximize_window","type_text","hotkey","click","scroll","navigate_url",
             "wait","find_element"
 
-        Returns:
+        Returns:f
             str: The action name ( eg. "focus_window")
         
         Example:
