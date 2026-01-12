@@ -255,6 +255,23 @@ class WindowManager:
         win32gui.MoveWindow(hwnd,x,y,width,height,True)
         return True
     
+    def get_window_by_pid(self, pid:int)->Optional[WindowInfo]:
+        def enum_callback(hwnd, found_window):
+            if found_window: return
+
+            if not win32gui.IsWindowVisible(hwnd):
+                return
+            try:
+                _,window_pid = win32process.GetWindowThreadProcessId(hwnd)
+                if window_pid == pid:
+                    if win32gui.GetWindowText(hwnd):
+                        found_window.append(self._build_window_info(hwnd))
+            except:
+                pass
+            found = []
+            win32gui.EnumWindows(enum_callback, found)
+            return found[0] if found else None
+        
     def get_window_by_hwnd(self, hwnd: int) -> Optional[WindowInfo]:
         if not win32gui.IsWindow(hwnd):
             return None

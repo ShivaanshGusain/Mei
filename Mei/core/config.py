@@ -239,7 +239,12 @@ class PendingConfirmation:
     started_at: datetime
     timeout_seconds: float = 5.0 
 
-
+@dataclass
+class AppHandlerConfig:
+    DEFAULT_LAUNCH_WAIT_SECONDS: float = 3.0
+    MAX_LAUNCH_WAIT_SECONDS:float = 10.0
+    WINDOW_POLL_INTERVAL: float = 0.3
+    
 @dataclass
 class SystemConfig:
     """System integration settings"""

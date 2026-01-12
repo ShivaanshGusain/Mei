@@ -162,7 +162,7 @@ class ActionHandler(ABC):
                                                                         
         Example for focus_window:                                        
             if "query" not in params and "hwnd" not in params:           
-                return (False, "Missing required parameter: 'query' or 'hwnd'")│
+                return (False, "Missing required parameter: 'query' or 'hwnd'")
             if "query" in params and not params["query"]:                
                 return (False, "Parameter 'query' cannot be empty")      
             return (True, None)                                          
