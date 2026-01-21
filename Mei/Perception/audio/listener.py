@@ -14,7 +14,7 @@ CHANNELS = 1
 
 
 class AudioListener:
-    def __init__(self): # for now removed threshold from parameters using Audioconfig.threshold
+    def __init__(self):
         config = get_config()
         self.threshold = config.audio.energy_threshold
         self.silence_duration = config.audio.silence_duration
@@ -24,14 +24,18 @@ class AudioListener:
         self.CHUNK = config.audio.chunk
         self.channels = config.audio.channels
 
-        pre_roll_seconds = 2.0
+        pre_roll_seconds = config.audio.pre_roll_seconds
         chunks_per_second = self.sample_rate / self.CHUNK
         max_chunks = int(pre_roll_seconds * chunks_per_second)
         self.rolling_buffer = deque(maxlen=max_chunks)
         
         
         self.pyaudio = pyaudio.PyAudio()
-        self.stream = self.pyaudio.open(format = pyaudio.paInt16, channels = self.channels, rate = self.sample_rate, input = True, frames_per_buffer= 1024)
+        self.stream = self.pyaudio.open(format = pyaudio.paInt16, 
+                                        channels = self.channels, 
+                                        rate = self.sample_rate, 
+                                        input = True, 
+                                        frames_per_buffer= 1024)
         self.speech_buffer = []
         self.silence_start_time = None
 

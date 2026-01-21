@@ -32,6 +32,7 @@ class AudioConfig:
     compute_type: str = "int8"
     language: str = 'en'
     beam_size: int = 5
+    pre_roll_seconds: float = 2.0
 
 @dataclass
 class KnownApps:
