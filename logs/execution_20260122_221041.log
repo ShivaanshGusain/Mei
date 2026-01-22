@@ -1,0 +1,86 @@
+{
+  "executions": [
+    {
+      "id": "session_20260122_221041",
+      "timestamp": "2026-01-22T22:10:43.986078",
+      "success": true,
+      "failure_reason": null,
+      "duration_ms": 1103.874,
+      "intent": {
+        "action": "test",
+        "target": null,
+        "parameters": {},
+        "raw_command": "test plan execution",
+        "confidence": 1.0
+      },
+      "plan": {
+        "strategy": "test_strategy",
+        "reasoning": "Testing executor",
+        "step_count": 2,
+        "steps": [
+          {
+            "index": 0,
+            "action": "wait",
+            "parameters": {
+              "seconds": 0.5,
+              "reason": "Step 1"
+            },
+            "description": "First wait",
+            "status": "COMPLETED"
+          },
+          {
+            "index": 1,
+            "action": "wait",
+            "parameters": {
+              "seconds": 0.5,
+              "reason": "Step 2"
+            },
+            "description": "Second wait",
+            "status": "COMPLETED"
+          }
+        ]
+      },
+      "step_results": [
+        {
+          "step_index": 0,
+          "success": true,
+          "method_used": "time_sleep",
+          "error": null,
+          "data_key": [
+            "requested_seconds",
+            "actual_seconds",
+            "reason"
+          ]
+        },
+        {
+          "step_index": 1,
+          "success": true,
+          "method_used": "time_sleep",
+          "error": null,
+          "data_key": [
+            "requested_seconds",
+            "actual_seconds",
+            "reason"
+          ]
+        }
+      ],
+      "final_context": {
+        "current_window": null,
+        "variables": {
+          "last_wait_seconds": 0.5,
+          "last_wait_reason": "Step 2"
+        },
+        "cached_element": []
+      }
+    }
+  ],
+  "metadata": {
+    "version": "1.0",
+    "created_at": "2026-01-22T22:10:41.870455",
+    "last_updated": "2026-01-22T22:10:43.986078",
+    "total_executions": 1,
+    "total_success": 0,
+    "total_failures": 0,
+    "total_successes": 1
+  }
+}

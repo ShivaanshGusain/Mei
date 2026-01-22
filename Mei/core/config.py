@@ -1,10 +1,5 @@
-"""
-Configuration management for Mei Agent.
-Single source of truth for all settings.
-"""
-
 import os
-import yaml
+import yaml 
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Any, Tuple,TYPE_CHECKING
 from pathlib import Path

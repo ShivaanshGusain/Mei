@@ -15,10 +15,14 @@ MAX_LOG_ENTRIES = 1000
 
 
 class ExecutionLogger:
-    def __init__(self, log_dir: Optional[str] = None, log_file: Optional[str] = None):
+    def __init__(self, log_dir: Optional[str] = 'logs', log_file: Optional[str] = None):
         config = get_config()
+        if log_file is None:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            log_file = f"execution_{timestamp}.log"
         self.log_dir = Path(log_dir) if log_dir else Path(config.root_dir) / DEFAULT_LOG_DIR
-        self.log_file = log_file if log_file else DEFAULT_LOG_FILE
+        self.log_file = log_file if log_file else DEFAULT_LOG_FILE 
+
         self.log_path = self.log_dir / log_file
 
         self.log_dir.mkdir(parents = True, exist_ok= True)
@@ -71,7 +75,7 @@ class ExecutionLogger:
             return False
     
     def _rotate_if_needed(self)->None:
-        if len(self._log_data['execution']) < MAX_LOG_ENTRIES:
+        if len(self._log_data['executions']) < MAX_LOG_ENTRIES:
             return
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         archive_name = f'execution_log_{timestamp}.json'
@@ -181,7 +185,7 @@ class ExecutionLogger:
                 continue
             total_failures +=1
             action = executions.get('intent',{}).get('action','unknown')
-            failure_by_action[action] = failure_by_action(action,0) +1
+            failure_by_action[action] = failure_by_action.get(action,0) +1
             
             for i,step_results in enumerate(executions.get("Step_results", [])):
                 if not step_results.get('success'):

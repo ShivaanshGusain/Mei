@@ -1,0 +1,90 @@
+{
+  "executions": [
+    {
+      "id": "session_20260122_221253",
+      "timestamp": "2026-01-22T22:12:55.826246",
+      "success": true,
+      "failure_reason": null,
+      "duration_ms": 1358.5620000000001,
+      "intent": {
+        "action": "test",
+        "target": null,
+        "parameters": {},
+        "raw_command": "test",
+        "confidence": 1.0
+      },
+      "plan": {
+        "strategy": "test",
+        "reasoning": "Testing",
+        "step_count": 2,
+        "steps": [
+          {
+            "index": 0,
+            "action": "wait",
+            "parameters": {
+              "seconds": 1
+            },
+            "description": "Wait 1s",
+            "status": "COMPLETED"
+          },
+          {
+            "index": 1,
+            "action": "hotkey",
+            "parameters": {
+              "keys": [
+                "ctrl",
+                "a"
+              ]
+            },
+            "description": "Select all",
+            "status": "COMPLETED"
+          }
+        ]
+      },
+      "step_results": [
+        {
+          "step_index": 0,
+          "success": true,
+          "method_used": "time_sleep",
+          "error": null,
+          "data_key": [
+            "requested_seconds",
+            "actual_seconds",
+            "reason"
+          ]
+        },
+        {
+          "step_index": 1,
+          "success": true,
+          "method_used": "pyautogui",
+          "error": null,
+          "data_key": [
+            "keys",
+            "key_count"
+          ]
+        }
+      ],
+      "final_context": {
+        "current_window": null,
+        "variables": {
+          "last_wait_seconds": 1.0,
+          "last_wait_reason": "No reason specified",
+          "last_hotkey": [
+            "ctrl",
+            "a"
+          ]
+        },
+        "cached_element": []
+      }
+    }
+  ],
+  "metadata": {
+    "version": "1.0",
+    "created_at": "2026-01-22T22:12:53.458723",
+    "last_updated": "2026-01-22T22:12:55.826246",
+    "total_executions": 1,
+    "total_success": 0,
+    "total_failures": 0,
+    "total_successes": 1
+  }
+}
