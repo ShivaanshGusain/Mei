@@ -6,7 +6,7 @@ from typing import Optional, Dict, List,Any
 
 import json
 
-INTENT_SYSTEM_PROMPT = """
+NLU_SYSTEM_PROMPT = """
 You are an intent extraction system for a Windows desktop automation assistant.
 
 Given a user command, extract:
