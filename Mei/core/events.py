@@ -92,6 +92,10 @@ class EventType(Enum):
     MEMORY_STORED = auto()
     MEMORY_RETRIEVED = auto()
     
+    MEMORY_SESSION_STARTED = auto()
+    MEMORY_SESSION_ENDED = auto()
+    MEMORY_CONTEXT_UPDATED = auto()
+
     # User Interaction
     CONFIRMATION_NEEDED = auto()
     CONFIRMATION_RECEIVED = auto()

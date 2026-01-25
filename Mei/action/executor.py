@@ -400,10 +400,8 @@ if __name__ == "__main__":
     print("EXECUTOR TEST")                                               
     print("=" * 60)                                                      
                                                                          
-    # Create executor                                                    
     executor = PlanExecutor(auto_subscribe=False)                        
                                                                          
-    # Test 1: List registered actions                                    
     print("\nTest 1: Registered Actions")                                
     print("-" * 40)                                                      
     actions = executor.list_actions()                                    
@@ -411,7 +409,6 @@ if __name__ == "__main__":
         handler = executor.get_handler(action)                           
         print(f"  {action:20} verify={handler.supports_verification}")   
                                                                          
-    # Test 2: Execute single action                                      
     print("\nTest 2: Execute Single Action (wait)")                      
     print("-" * 40)                                                      
     result = executor.execute_single_action(                             
@@ -421,7 +418,6 @@ if __name__ == "__main__":
     print(f"  Success: {result.success}")                                
     print(f"  Data: {result.data}")                                      
                                                                          
-    # Test 3: Execute a simple plan                                      
     print("\nTest 3: Execute Simple Plan")                               
     print("-" * 40)                                                      
                                                                          
@@ -455,7 +451,6 @@ if __name__ == "__main__":
     success = executor.execute_plan(plan, intent)                        
     print(f"\n  Plan Success: {success}")                                
                                                                          
-    # Test 4: Execute plan with invalid action                           
     print("\nTest 4: Plan with Invalid Action")                          
     print("-" * 40)                                                      
                                                                          

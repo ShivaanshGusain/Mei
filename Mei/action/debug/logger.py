@@ -9,7 +9,7 @@ from ...core.task import Plan, Intent, StepStatus
 from ..context import ExecutionContext
 
 
-DEFAULT_LOG_DIR = 'data/exection_logs'
+DEFAULT_LOG_DIR = 'data/execution_logs'
 DEFAULT_LOG_FILE = 'execution_log.json'
 MAX_LOG_ENTRIES = 1000
 
@@ -17,18 +17,30 @@ MAX_LOG_ENTRIES = 1000
 class ExecutionLogger:
     def __init__(self, log_dir: Optional[str] = 'logs', log_file: Optional[str] = None):
         config = get_config()
+        if log_dir:
+            self.log_dir = Path(log_dir)
+
+        else:
+            root = Path(config.root_dir) if config else Path(".") 
+            self.log_dir = root / DEFAULT_LOG_DIR
+
         if log_file is None:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             log_file = f"execution_{timestamp}.log"
-        self.log_dir = Path(log_dir) if log_dir else Path(config.root_dir) / DEFAULT_LOG_DIR
-        self.log_file = log_file if log_file else DEFAULT_LOG_FILE 
+            self.log_file = f"execution_{timestamp}.json"
+        else:
+            self.log_file = log_file
 
-        self.log_path = self.log_dir / log_file
-
-        self.log_dir.mkdir(parents = True, exist_ok= True)
+        self.log_path = self.log_dir / self.log_file
+        try:
+            self.log_dir.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            print(f"Warning: Could not create log dir {self.log_dir}: {e}")
 
         self._log_data = self._load_or_create_log()
         self._session_id = self._generate_session_id()
+
+        self._save_log()
 
     def _generate_session_id(self)-> str:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -75,7 +87,7 @@ class ExecutionLogger:
             return False
     
     def _rotate_if_needed(self)->None:
-        if len(self._log_data['executions']) < MAX_LOG_ENTRIES:
+        if len(self._log_data.get('executions', [])) < MAX_LOG_ENTRIES:
             return
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         archive_name = f'execution_log_{timestamp}.json'
@@ -187,7 +199,7 @@ class ExecutionLogger:
             action = executions.get('intent',{}).get('action','unknown')
             failure_by_action[action] = failure_by_action.get(action,0) +1
             
-            for i,step_results in enumerate(executions.get("Step_results", [])):
+            for i,step_results in enumerate(executions.get("step_results", [])):
                 if not step_results.get('success'):
                     failure_by_step[i] = failure_by_step(i,0) +1
                     if step_results.get("error"):

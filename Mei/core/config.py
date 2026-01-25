@@ -248,7 +248,92 @@ class SystemConfig:
     virtual_desktops: bool = True
     prefer_accessibility_api: bool = True  # Prefer API over mouse clicks
 
+@dataclass
+class ConversationTurn:
+    """Single exchange in conversation history."""
+    timestamp: datetime
+    user_input: str
+    intent: Optional[Intent] = None
+    task_id: Optional[str] = None
+    success: Optional[bool] = None
+    agent_response: Optional[str] = None
 
+    def to_dict(self)-> Dict[str,Any]:
+        result = {
+            'timestamp':self.timestamp.isoformat(),
+            'user_input':self.user_input,
+            'task_id':self.task_id,
+            'success':self.success,
+            'agent_response':self.agent_response
+        }
+        if self.intent:
+            result['intent'] = {
+                'action':self.intent.action,
+                'target':self.intent.target,
+                'parameters':self.intent.parameters,
+                'confidence':self.intent.confidence
+            }
+        else:
+            result['intent'] = None
+
+        return result
+@dataclass
+class SessionTask:
+    """Task executed during this session."""
+    task_id: str
+    intent: Intent
+    plan_strategy: str
+    started_at: datetime
+    completed_at: Optional[datetime] = None
+    success: Optional[bool] = None
+    error: Optional[str] = None
+    from_cache: bool = False
+
+    def to_dict(self)->Dict[str,Any]:
+        return {
+            'task_id':self.task_id,
+            'intent':{
+                'action':self.intent.action,
+                'target':self.intent.target,
+                'parameters':self.intent.parameters,
+                'confidence':self.intent.confidence,
+                'raw_command':self.intent.raw_command
+            },
+            'plan_strategy':self.plan_strategy,
+            'started_at':self.started_at.isoformat(),
+            'completed_at':self.completed_at.isoformat() if self.completed_at else None,
+            'success': self.success,
+            'error':self.error,
+            'from_cache':self.from_cache
+        }
+
+    @property
+    def duration_ms(self)->Optional[float]:
+        if self.completed_at is None:
+            return None
+        delta = self.completed_at - self.started_at
+        return delta.total_seconds() *1000
+    
+@dataclass
+class UserCorrection:
+    """User corrected our understanding."""
+    timestamp: datetime
+    original_input: str
+    original_intent: Intent
+    corrected_input: str
+    corrected_intent: Intent
+    context: Dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self)->Dict[str,Any]:
+        return {
+            'timestamp':self.timestamp.isoformat(),
+            'original_input':self.original_input,
+            'original_intent':self.original_intent.__dict__ if self.original_intent else None,
+            'corrected_input':self.corrected_input,
+            'corrected_intent':self.corrected_intent.__dict__ if self.corrected_intent else None,
+            'context':self.context
+        }
+    
 @dataclass
 class MemoryConfig:
     """Memory settings"""
