@@ -253,7 +253,7 @@ class ConversationTurn:
     """Single exchange in conversation history."""
     timestamp: datetime
     user_input: str
-    intent: Optional[Intent] = None
+    intent: Optional['Intent'] = None
     task_id: Optional[str] = None
     success: Optional[bool] = None
     agent_response: Optional[str] = None
@@ -281,7 +281,7 @@ class ConversationTurn:
 class SessionTask:
     """Task executed during this session."""
     task_id: str
-    intent: Intent
+    intent: 'Intent'
     plan_strategy: str
     started_at: datetime
     completed_at: Optional[datetime] = None
@@ -319,9 +319,9 @@ class UserCorrection:
     """User corrected our understanding."""
     timestamp: datetime
     original_input: str
-    original_intent: Intent
+    original_intent: 'Intent'
     corrected_input: str
-    corrected_intent: Intent
+    corrected_intent: 'Intent'
     context: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self)->Dict[str,Any]:

@@ -3,9 +3,9 @@ import secrets
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 
-from ..core.config import ConversationTurn, SessionTask,UserCorrection, get_config
-from ..core.task import Intent, Plan, Step
-from ..core.events import EventType, Event, subscribe, emit, get_event_bus
+from ..core.config import ConversationTurn, SessionTask,UserCorrection
+from ..core.task import Intent, Plan
+from ..core.events import EventType, Event, subscribe, emit
 from .store import get_memory_store, MemoryStore
 
 
@@ -36,8 +36,8 @@ class WorkingMemory:
         self._prior_context: List[Dict[str,Any]] = []
 
         self._lock: threading.RLock = threading.RLock()
-
-        self._subscribe_to_events()
+        if auto_subscribe:
+            self._subscribe_to_events()
 
     def _subscribe_to_events(self)->None:
         subscribe(EventType.AGENT_STARTED, self._on_agent_started)
@@ -360,4 +360,403 @@ class WorkingMemory:
             failure_reason:Optional[str], 
             failure_step_index: Optional[int]
             )->int:
-        pass
+        
+        intent_dict = {
+            'action':intent.action,
+            'target':intent.target,
+            'parameters':intent.parameters,
+            'confidence':intent.confidence
+        }
+
+        if plan is not None:
+            plan_dict = {
+                'strategy':plan.strategy if hasattr(plan,'strategy') else 'unknown',
+                'reasoning': plan.reasoning if hasattr(plan,'reasoning') else "",
+                'steps': []
+            }
+
+            if hasattr(plan,'steps'):
+                for step in plan.steps:
+                    if hasattr(step, 'to_dict'):
+                        plan_dict['steps'].append(step.to_dict())
+                    elif hasattr(step,"__dict__"):
+                        plan_dict['steps'].append({
+                            'action':step.action,
+                            'parameters':step.parameters,
+                            'description':getattr(step,'description',"")
+                        })
+        
+        else:
+            plan_dict = {"strategy":"unknown","reasoning":"","steps":[]}
+
+        try:
+            self._store.save_task_execution(
+                execution_id=execution_id,
+                session_id=self._session_id,
+                raw_command=intent.raw_command,
+                intent= intent_dict,
+                plan = plan_dict,
+                success= success,
+                duration_ms=duration_ms,
+                failure_reason=failure_reason,
+                failure_step_index=failure_step_index,
+                context= context,
+                step_results = step_results
+            )
+
+        except Exception as e:
+            print(f"Failed to save task execution: {e}")
+            return
+        
+        if success and plan is not None:
+            try:
+                intent_pattern = self._build_intent_pattern(intent)
+                self._store.cache_plan(
+                    intent_pattern=intent_pattern,
+                    intent_action=intent.action,
+                    intent_target=intent.target,
+                    plan_strategy=plan_dict['strategy'],
+                    plan_steps=plan_dict['steps'],
+                    normalized_command=intent.raw_command.lower().strip()
+                )
+            except Exception as e:
+                print(f"Failed to cache plan: {e}")
+
+        
+        if not success:
+            try:
+                intent_pattern = self._build_intent_pattern(intent)
+                self._store.record_plan_failure(intent_pattern)
+            except Exception as e:
+                print(f"Failed to record plan failure: {e}")
+
+        try:
+            self._store.record_command(
+                raw_pattern=intent.raw_command,
+                intent_action= intent.action,
+                intent_target=intent.target,
+                success=success,
+                normalized_pattern=intent.raw_command.lower().strip()
+            )
+        
+        except Exception as e:
+            print(f"Failed to record command: {e}")
+
+    def _build_intent_pattern(self, intent:Intent)->str:
+        pattern = intent.action.lower()
+
+        if intent.target:
+            pattern += f":{intent.target.lower()}"
+
+        variable_action = ['search', 'type','navigate']
+
+        if intent.actoin.lower() in variable_action:
+            pattern += ":*"
+
+        return pattern
+    
+    def _on_agent_stopped(self,event:Event)->None:
+        if not self._is_active:
+            return
+        
+        with self._lock:
+
+            if self._current_task is not None:
+
+                self._current_task.completed_at = datetime. now()
+                self._current_task.success = False
+                self._current_task.error = "Session ended before task completion"
+                self._task_history.append(self._current_task)
+                self._current_task = None
+
+            for key, value in self._session_preferences.items():
+                try:
+                    existing = self._store.get_preferences(key)
+                    if existing!=value:
+                        self._store.set_preference(
+                            preference_key=key,
+                            preference_value=value,
+                            is_explicit=False,
+                            confidence=0.5
+                        )
+
+                except Exception as e:
+                    print(f"Failed to persist preference {key}: {e}")
+
+            for correction in self._corrections:
+                try:
+                    key = f"correction:{correction.original_intent.target}:{correction.corrected_intent.target}"
+                    self._store.set_preference(
+                        preference_key=key,
+                        preference_value=correction.to_dict(),
+                        category='correction',
+                        is_explicit=False,
+                        confidence=0.7
+                    )
+                
+                except Exception as e:
+                    pass
+            
+        total_tasks = len(self._task_history)
+        successful_tasks = sum(1 for t in self._task_history if t.success)
+        failed_tasks = total_tasks- successful_tasks
+        session_duration = (datetime.now() - self._started_at).total_seconds() if self._started_at else 0
+
+        try:
+            deleted = self._store.cleanup_old_data()
+            if any(v > 0 for v in deleted.values()):
+                print(f"Cleanup deleted {deleted}")
+            
+        except Exception as e:
+            print(f"Cleanup Failed: {e}")
+
+        emit(
+            EventType.MEMORY_SESSION_ENDED,
+            source='WorkingMemory',
+            session_id = self._session_id,
+            total_tasks = total_tasks,
+            successful_tasks= successful_tasks,
+            failed_tasks = failed_tasks,
+            duration_seconds = session_duration,
+            correction_recorded = len(self._corrections)
+        )
+
+        self._session_id = None
+        self._started_at = None
+        self._last_activity = None
+        self._is_active = None
+        self._conversation_history = []
+        self._task_history = []
+        self._current_task = None
+        self._corrections = []
+        self._session_preferences = {}
+        self._prior_context = []
+
+        print(f"Session ended. {successful_tasks}/{total_tasks} task succeeded. Duration: {session_duration:.1f}s")
+
+    def get_context_for_planner(self, intent:Intent)-> Dict[str,Any]:
+        context = {
+                   'session_id':self._session_id,
+                   'session_active' : self._is_active
+                   }
+
+        if len(self._conversation_history) >1:
+            recent = self._conversation_history[-4:-1] if len(self._conversation_history)>=4 else self._conversation_history[-1]
+            context['recent_conversation'] = [
+                {
+                    'user_input':turn.user_input,
+                    'intent_aciton': turn.intent.action if turn.intent else None,
+                    'intent_target':turn.intent.target if turn.intent else None,
+                    'success': turn.success
+                }
+                for turn in recent
+            ]
+
+        related_tasks = []
+        for task in self._task_history:
+            if (task.intent.action == intent.action or task.intent.target == intent.target):
+                related_tasks.append(task)
+
+        if related_tasks:
+            context['session_related_tasks'] = [
+                {
+                       "action": t.intent.action,
+                       "target": t.intent.target,
+                       "strategy": t.plan_strategy,
+                       "success": t.success,
+                       "error": t.error,
+                       "from_cache": t.from_cache
+                }
+                for t in related_tasks[-3:]
+            ]
+        
+        relevant_corrections = [
+            c for c in self._corrections
+            if (c.original_intent and (c.original_intent.action == intent.action or c.original_intent.target == intent.target))
+        ]
+
+        if relevant_corrections:
+            context['user_corrections'] = [
+                {
+                       "original_target": c.original_intent.target if c.original_intent else None,
+                       "corrected_target": c.corrected_intent.target if c.corrected_intent else None,
+                       "note": f"User corrected '{c.original_input}' to '{c.corrected_input}'"      
+                }
+                for c in relevant_corrections[-3:]
+            ]
+        
+        if self._session_preferences:
+            relevant_prefs = {}
+            
+            if f"default_{intent.action}" in self._session_preferences:
+                relevant_prefs[f"default_{intent.action}"] = self._session_preferences[f"default_{intent.action}"]
+
+            if "default_browser" in self._session_preferences:
+                relevant_prefs["default_browser"] = self._session_preferences["default_browser"]
+
+            if relevant_prefs:
+                context["preferences"] = relevant_prefs
+
+        return context
+    
+    def get_recent_conversation(self, turns:int = 5)->List[ConversationTurn]:
+        with self._lock:
+            return self._conversation_history[-turns].copy()
+        
+    def get_conversation_summary_for_llm(self,max_turns:int = 5)->str:
+        
+        with self._lock:
+            turns = self._conversation_history[-max_turns]
+        
+        if not turns:
+            return "Noo previous conversation in this session."
+        
+        lines = ['Recent conversation:']
+
+        for turn in turns:
+            lines.append(f" User: \"{turn.user_input}\"")
+            
+            if turn.intent:
+                lines.append(f" Intent: {turn.intent.action} target: {turn.intent.target}")
+
+            if turn.success is not None:
+                outcome = 'succeeded' if turn.success else 'failed'
+                lines.append(f" Task {outcome}")
+            
+        return '\n'.join(lines)
+
+    def get_task_history(self, count:int = 10)->List[SessionTask]:
+        with self._lock:
+            return self._task_history[-count].copy()
+        
+    def get_current_task(self)->Optional[SessionTask]:
+        with self._lock:
+            return self._current_task
+
+    def add_agent_response(self, response:str)->None:
+        with self._lock:
+            if self._conversation_history:
+                self._conversation_history[-1].agent_response = response
+
+    def set_session_preference(self, key:str, value:Any)->None:
+        with self._lock:
+            self._session_preferences[key] = value
+        
+    def get_session_preference(self, key:str, default:Any = None) -> Any:
+        return self._session_preferences.get(key, default)
+
+
+    @property
+    def session_id(self)->Optional[str]:
+        return self._session_id
+
+    @property
+    def is_active(self)->bool:
+        return self._is_active
+
+    @property
+    def session_duration_seconds(self)->float:
+        if self._started_at is None:
+            return 0.0
+        
+        return (datetime.now() - self._started_at).total_seconds()
+
+    @property
+    def tasks_completed_count(self)->int:
+        return sum(1 for t in self._task_history if t.success)
+    
+    @property
+    def task_failed_count(self)->int:
+        return sum(1 for t in self._task_history if t.success is False)
+    
+    @property
+    def total_tasks_count(self)->int:
+        return len(self._task_history)
+    
+    def to_dict(self)->Dict[str,Any]:
+        with self._lock:
+            return {
+                'session_id': self._session_id,
+                "is_active": self._is_active,
+                "started_at": self._started_at.isoformat() if self._started_at else None,
+                "last_activity": self._last_activity.isoformat() if self._last_activity else None,
+                "duration_seconds": self.session_duration_seconds,
+                "conversation_turns": len(self._conversation_history),
+                "tasks_completed": self.tasks_completed_count,
+                'tasks_failed': self.task_failed_count,
+                'corrections_recorded': len(self._corrections),
+                'current_task_id': self._current_task.task_id if self._current_task else None,
+                'preferences':self._session_preferences.copy()
+            }
+    
+_working_memory_instance: Optional[WorkingMemory] = None
+
+def get_working_memory()->WorkingMemory:
+
+    global _working_memory_instance
+    if _working_memory_instance is None:
+        _working_memory_instance = WorkingMemory()
+
+    return _working_memory_instance
+
+__all__ = [
+    'WorkingMemory',
+    'get_working_memory',
+    'ConversationTurn',
+    'SessionTask',
+]
+
+if __name__ == "__main__":
+    """Test the working memory module."""
+    import time
+    print("=" * 60)
+    print("WORKING MEMORY TEST")
+    print("=" * 60)
+    
+    # Create instance (without auto-subscribe for manual testing)
+    wm = WorkingMemory(auto_subscribe=False)
+    
+    # Test 1: Session start
+    print("\nTest 1: Session Start")
+    wm._on_agent_started(Event(EventType.AGENT_STARTED, {}))
+    time.sleep(1)
+    print(f"  Session ID: {wm.session_id}")
+    print(f"  Is Active: {wm.is_active}")
+    
+    # Test 2: Record transcription
+    print("\nTest 2: Record Transcription")
+    wm._on_transcribe_completed(Event(
+        EventType.TRANSCRIBE_COMPLETED,
+        {"text": "open chrome"}
+    ))
+    print(f"  Conversation turns: {len(wm._conversation_history)}")
+    
+    # Test 3: Record intent
+    print("\nTest 3: Record Intent")
+    test_intent = Intent(
+        action="open",
+        target="chrome",
+        parameters={},
+        confidence=0.9,
+        raw_command="open chrome"
+    )
+    wm._on_intent_recognized(Event(
+        EventType.INTENT_RECOGNIZED,
+        {"intent": test_intent}
+    ))
+    print(f"  Last turn intent: {wm._conversation_history[-1].intent}")
+    
+    # Test 4: Build context
+    print("\nTest 4: Build Planner Context")
+    context = wm.get_context_for_planner(test_intent)
+    print(f"  Context keys: {list(context.keys())}")
+    
+    # Test 5: Session end
+    print("\nTest 5: Session End")
+    print(f"  Is Active: {wm.is_active}")
+    print(f"  Session ID: {wm.session_id}")
+    wm._on_agent_stopped(Event(EventType.AGENT_STOPPED, {}))
+
+    print("\n" + "=" * 60)
+    print("ALL TESTS PASSED")
+    print("=" * 60)

@@ -283,7 +283,7 @@ CREATE INDEX IF NOT EXISTS idx_error_action
 
 
 class MemoryStore:
-    def __init__(self, db_path: Optional[str]):
+    def __init__(self, db_path: Optional[str] = None):
         if db_path:
             self.db_path = Path(db_path)
         else:
