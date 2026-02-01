@@ -502,10 +502,10 @@ Original command: "{intent.raw_command}"
     
 
 _planner_instance: Optional[TaskPlanner] = None
-def get_planner()->TaskPlanner:
+def get_planner(auto_subscribe: bool = True)->TaskPlanner:
     global _planner_instance
     if _planner_instance is None:
-        _planner_instance = TaskPlanner()
+        _planner_instance = TaskPlanner(auto_subscribe=auto_subscribe)
     return _planner_instance
 
 

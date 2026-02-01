@@ -218,9 +218,14 @@ class PlanExecutor:
             emit(
                 EventType.PLAN_STEP_FAILED,
                 source='Executor',
-                step_index = step_index,
-                error= error_msg
+                step_index=step_index,
+                action=step.action,                   
+                parameters=step.parameters,           
+                error=error_msg,
+                method_used=None,                    
+                duration_ms=0.0                       
             )
+
             return (False, error_msg)
         
         is_valid, validation_error = handler.validate(step.parameters)
@@ -233,8 +238,12 @@ class PlanExecutor:
             emit(
                 EventType.PLAN_STEP_FAILED,
                 source='Executor',
-                step_index = step_index,
-                error= error_msg
+                step_index=step_index,
+                action=step.action,                   
+                parameters=step.parameters,           
+                error=error_msg,
+                method_used=None,                     
+                duration_ms=0.0                     
             )
             return (False, error_msg)
 
@@ -253,10 +262,14 @@ class PlanExecutor:
                 emit(
                     EventType.PLAN_STEP_FAILED,
                     source='Executor',
-                    step_index = step_index,
-                    error= error_msg,
-                    method_used=result.method_used
-                )
+                    step_index=step_index,
+                    action=step.action,                   # ADD
+                    parameters=step.parameters,           # ADD
+                    error=error_msg,
+                    method_used=result.method_used,       # Already present
+                    duration_ms=step_duration_ms,         # ADD
+                    data=result.data                      # ADD: may contain partial info
+                )                
                 return (False, error_msg)
             
             verify_result: Optional[VerifyResult] = None
@@ -287,16 +300,19 @@ class PlanExecutor:
             if result.data:
                 for key, value in list(result.data.items())[:3]:
                     print(f" {key}:{value}")
-            
+            step_duration_ms = (step.completed_at - step.started_at).total_seconds() * 1000
             emit(
                 event_type=EventType.PLAN_STEP_COMPLETED,
                 source="Executor",
-                step_index= step_index,
-                action= step.action,
-                method_used = result.method_used,
-                data = result.data,
-                verified = step.verified
-            )
+                step_index=step_index,
+                action=step.action,
+                parameters=step.parameters,          
+                method_used=result.method_used,
+                duration_ms=step_duration_ms,         
+                data=result.data,
+                verified=step.verified,
+                verify_confidence=verify_result.confidence if verify_result else None  
+            )            
             return (True, None)
     
         except Exception as e:
@@ -305,12 +321,16 @@ class PlanExecutor:
             step.error = error_msg                             
             step.completed_at = datetime.now()                 
             print(f"    ✗ Exception: {e}")                     
-            emit(                                              
-                EventType.PLAN_STEP_FAILED,                    
-                source="Executor",                             
-                step_index=step_index,                         
-                error=error_msg                                
-            )                                                  
+            emit(
+                EventType.PLAN_STEP_FAILED,
+                source="Executor",
+                step_index=step_index,
+                action=step.action,                   
+                parameters=step.parameters,           
+                error=error_msg,
+                method_used=None,                    
+                duration_ms=step_duration_ms          
+            )           
             return (False, error_msg)                          
 
 
@@ -370,10 +390,10 @@ class PlanExecutor:
 _executor_instance:Optional[PlanExecutor] = None
 
 
-def get_executor()-> PlanExecutor:
+def get_executor(auto_subscribe:bool = True)-> PlanExecutor:
     global _executor_instance
     if _executor_instance is None:
-        _executor_instance = PlanExecutor(auto_subscribe=True)
+        _executor_instance = PlanExecutor(auto_subscribe=auto_subscribe)
     return _executor_instance
 
 def execute_plan(plan:Plan, intent:Intent)->bool:

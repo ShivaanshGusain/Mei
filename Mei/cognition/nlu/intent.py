@@ -287,10 +287,10 @@ class IntentExtractor:
 
 _extractor_instance: Optional[IntentExtractor] = None
 
-def get_intent_extractor() ->IntentExtractor:
+def get_intent_extractor(auto_subscribe: bool = True) ->IntentExtractor:
     global _extractor_instance
     if _extractor_instance is None:
-        _extractor_instance = IntentExtractor()
+        _extractor_instance = IntentExtractor(auto_subscribe=auto_subscribe)
     return _extractor_instance
 
 def extract_intent(text:str)->Optional[Intent]:

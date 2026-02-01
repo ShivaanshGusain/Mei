@@ -1,7 +1,7 @@
 import os
 import yaml 
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Any, Tuple,TYPE_CHECKING
+from typing import Optional, List, Dict, Any, Tuple,TYPE_CHECKING, Callable
 from pathlib import Path
 from datetime import datetime
 from enum import Enum
@@ -246,7 +246,46 @@ class SystemConfig:
     """System integration settings"""
     multi_monitor: bool = True
     virtual_desktops: bool = True
-    prefer_accessibility_api: bool = True  # Prefer API over mouse clicks
+    prefer_accessibility_api: bool = True  
+
+@dataclass
+class PendingOperation:
+    """Stores state when waiting for user input."""
+    operation_type: str                   
+    original_command: str                  
+    prompt_given: str                      
+    options: Optional[List[str]]           
+    context: Dict[str, Any]               
+    timeout_at: datetime                  
+    on_confirm: Optional[Callable]         
+    on_clarify: Optional[Callable]         
+    on_cancel: Optional[Callable]        
+
+@dataclass
+class FocusContext:
+    """Current focus state for contextual commands."""
+    current_app: Optional[str]           # e.g., "notepad.exe"
+    current_app_display: Optional[str]   # e.g., "Notepad"
+    current_window: Optional[WindowInfo] # Full window info
+    current_window_title: Optional[str]  # Window title
+    document_path: Optional[str]         # If editing a file
+    app_capabilities: Dict[str, Any]     # What this app can do
+    timestamp: datetime                  # When captured
+    
+@dataclass
+class AppCapabilities:
+    """What an application can do."""
+    app_name: str                        # e.g., "notepad.exe"
+    display_name: str                    # e.g., "Notepad"
+    app_type: str                        # e.g., "text_editor", "browser"
+    has_search: bool = False
+    search_hotkey: Optional[str] = None  # e.g., "ctrl+f"
+    has_tabs: bool = False
+    tab_switch_hotkey: Optional[str] = None
+    has_undo: bool = False
+    undo_hotkey: Optional[str] = None
+    supports_clipboard: bool = True
+    custom_actions: Dict[str, str] = field(default_factory=dict)
 
 @dataclass
 class ConversationTurn:
@@ -333,6 +372,48 @@ class UserCorrection:
             'corrected_intent':self.corrected_intent.__dict__ if self.corrected_intent else None,
             'context':self.context
         }
+
+@dataclass
+class HistoricalHint:
+    message:str
+    priority:int
+    source:str
+    confidence:float = 1.0
+    metadata:Dict[str,Any] = field(default_factory=dict)
+
+    def __str__(self)->str:
+        return self.message
+    
+    def to_dict(self)->Dict[str,Any]:
+        return {
+            'message':self.message,
+            'priority':self.priority,
+            'source':self.source,
+            'confidence':self.confidence,
+            'metadata':self.metadata
+        }
+    
+@dataclass
+class FailurePattern:
+    action:str
+    target:Optional[str]
+    failure_count: int
+    total_count: int
+    failure_rate: float
+    common_errors:List[str]
+    failed_methods:List[str]
+    recovery_suggestions:List[Dict[str,Any]]
+
+@dataclass
+class SuccessPattern:
+    action:str
+    target: Optional[str]
+    success_count:int
+    total_count:int
+    success_rate:float
+    best_strategy:Optional[str]
+    best_method:List[Dict[str,Any]]
+    avg_duration_ms:float
     
 @dataclass
 class MemoryConfig:
@@ -342,19 +423,19 @@ class MemoryConfig:
     similarity_threshold: float = 0.7
 
 
-@dataclass
-class SafetyConfig:
-    """Safety settings"""
-    confirm_destructive: bool = True  # Confirm before delete, send, etc.
-    blocked_apps: List[str] = field(default_factory=lambda: ["regedit.exe", "cmd.exe"])
-    max_actions_per_minute: int = 60
+# @dataclass
+# class SafetyConfig:
+#     """Safety settings"""
+#     confirm_destructive: bool = True  # Confirm before delete, send, etc.
+#     blocked_apps: List[str] = field(default_factory=lambda: ["regedit.exe", "cmd.exe"])
+#     max_actions_per_minute: int = 60
 
-@dataclass
-class VerificationConfig:
-    goal_confidence_threshold: float = 0.6
-    step_confidence_threshold: float = 0.5
-    element_staleness_seconds: float = 5.0
-    confirmation_timeout_seconds: float = 5.0
+# @dataclass
+# class VerificationConfig:
+#     goal_confidence_threshold: float = 0.6
+#     step_confidence_threshold: float = 0.5
+#     element_staleness_seconds: float = 5.0
+#     confirmation_timeout_seconds: float = 5.0
 
 @dataclass
 class Config:
@@ -364,11 +445,11 @@ class Config:
     llm: LLMConfig = field(default_factory=LLMConfig)
     system: SystemConfig = field(default_factory=SystemConfig)
     memory: MemoryConfig = field(default_factory=MemoryConfig)
-    safety: SafetyConfig = field(default_factory=SafetyConfig)
+    # safety: SafetyConfig = field(default_factory=SafetyConfig)
     debug: bool = False
     log_level: str = "INFO"
     visual: VisualConfig = field(default_factory=VisualConfig)
-    verification: VerificationConfig = field(default_factory=VerificationConfig)
+    # verification: VerificationConfig = field(default_factory=VerificationConfig)
     root_dir: Path= ROOT_DIR
 
     @classmethod
