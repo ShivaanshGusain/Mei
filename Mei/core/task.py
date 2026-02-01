@@ -351,6 +351,7 @@ class Plan:
     strategy: str = ""                   # e.g., "reuse_window", "new_window"
     reasoning: str = ""                  # Why this plan was chosen
     created_at: datetime = field(default_factory=datetime.now)
+    id: Optional[str] = None
     
     @property
     def current_step_index(self) -> int:

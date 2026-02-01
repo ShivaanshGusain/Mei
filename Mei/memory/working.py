@@ -4,7 +4,7 @@ import re
 import os
 from typing import Dict, Any, Optional, List
 from datetime import datetime
-
+import json
 from ..core.config import ConversationTurn, SessionTask,UserCorrection, FocusContext, AppCapabilities
 from ..core.task import Intent, Plan
 from ..core.events import EventType, Event, subscribe, emit
@@ -365,9 +365,18 @@ class WorkingMemory:
     
     def _simplify_window_title(self, title: str) -> str:
         if not title:
-            return 
-        # Later enhancement using regex patterns
-        return title
+            return "%"
+
+        if ' - ' in title:
+            parts = title.split(' - ')
+            app_part = parts[-1].strip()
+
+            if(len(app_part)>2):
+                return f"%{app_part}"
+        
+        if len(title) < 20:
+            return f"%{title}"
+        return f"%{title[:20]}%"
     
     def _on_plan_step_failed(self, event:Event)->None:
         if not self._is_active:
@@ -472,16 +481,18 @@ class WorkingMemory:
         
         with self._lock:
             intent = event.data.get('intent')
-            
+            last_turn = None
             if intent is None:
                 return
             
             if self._conversation_history:
                 last_turn = self._conversation_history[-1]
-                last_turn.intent = intent
+                if hasattr(last_turn, 'intent'):
+                    last_turn.intent = intent
             
-            if self._is_potential_correction(last_turn.user_input):
-                self._handle_potential_correction(intent)
+            if last_turn and hasattr(last_turn, 'user_input'):
+                if self._is_potential_correction(last_turn.user_input):
+                    self._handle_potential_correction(intent)
 
             self._last_activity = datetime.now()
 
@@ -619,30 +630,41 @@ class WorkingMemory:
         if not self._is_active:
             return
         
-        if self._current_task is None:
-            print("PLAN_COMPLETED but no current task")
+        intent = event.data.get('intent')
+        if self._current_task is None and not intent:
+            print("PLAN_COMPLETED but no current task or intent data")
             return
         
         with self._lock:
             execution_id = event.data.get("execution_id", self._current_task.task_id)
-            duration_ms = event.data.get("duration_ms", 0.0)
+            
+            if not execution_id and self._current_task:
+                execution_id = self._current_task.task_id
+            
             intent = event.data.get("intent", self._current_task.intent)
+
+            if not intent and self._current_task:
+                intent = self._current_task.intent
+
+            duration_ms = event.data.get("duration_ms", 0.0)
             plan = event.data.get("plan")
             step_results = event.data.get("step_results", [])
             context = event.data.get("context")
+            success = event.data.get("success", True)
 
-            self._current_task.task_id = execution_id
-            self._current_task.completed_at = datetime.now()
-            self._current_task.success = True
-            self._current_task.error = None
+            if self._current_task:
+                self._current_task.task_id = execution_id
+                self._current_task.completed_at = datetime.now()
+                self._current_task.success = success
+                self._current_task.error = None
 
-            self._task_history.append(self._current_task)
+                self._task_history.append(self._current_task)
 
-            while len(self._task_history) > self._max_task_history:
-                self._task_history.pop(0)
+                while len(self._task_history) > self._max_task_history:
+                    self._task_history.pop(0)
 
-            completed_task = self._current_task
-            self._current_task = None
+                completed_task = self._current_task
+                self._current_task = None
 
             if self._conversation_history:
                 for turn in reversed(self._conversation_history):
@@ -663,6 +685,44 @@ class WorkingMemory:
                 failure_step_index = None
             )
 
+            if success and intent and plan:
+                try:
+                    pattern = intent.action.lower()
+                    if intent.target:
+                        pattern +=f":{intent.target.lower()}"
+                    
+                    if intent.action.lower() in ["search", "type", "type_text", "navigate"]:
+                        pattern += "*"
+                    import hashlib
+                    plan_steps_data = []
+                    for step in plan.steps:
+                        plan_steps_data.append({
+                            "action": step.action,
+                            "parameters": step.parameters,
+                            "description": step.description
+                        })
+                    step_str = json.dumps(plan_steps_data, sort_keys=True)
+                    generated_hash = hashlib.md5(step_str.encode()).hexdigest()
+
+                    self._store.cache_plan(
+                        intent_pattern=pattern,
+                        intent_action=intent.action,
+                        intent_target=intent.target,
+                        raw_command=intent.raw_command,
+                        plan_strategy=plan.strategy,
+                        plan_steps=plan_steps_data,
+                        plan_hash=getattr(plan, 'id', generated_hash)
+                    )
+
+                    self._store.record_command(
+                        raw_command=intent.raw_command,
+                        intent_action=intent.action,
+                        intent_target=intent.target,
+                        success=True
+                    )
+
+                except Exception as e:
+                    print(f"Failed to cache plan: {e}")
             emit(
                 EventType.MEMORY_STORED,
                 source="WorkingMemory",
@@ -801,7 +861,7 @@ class WorkingMemory:
                     intent_target=intent.target,
                     plan_strategy=plan_dict['strategy'],
                     plan_steps=plan_dict['steps'],
-                    normalized_command=intent.raw_command.lower().strip()
+                    raw_command=intent.raw_command.lower().strip()
                 )
             except Exception as e:
                 print(f"Failed to cache plan: {e}")
@@ -816,7 +876,7 @@ class WorkingMemory:
 
         try:
             self._store.record_command(
-                raw_pattern=intent.raw_command,
+                raw_command=intent.raw_command,
                 intent_action= intent.action,
                 intent_target=intent.target,
                 success=success,
@@ -834,7 +894,7 @@ class WorkingMemory:
 
         variable_action = ['search', 'type','navigate']
 
-        if intent.actoin.lower() in variable_action:
+        if intent.action.lower() in variable_action:
             pattern += ":*"
 
         return pattern

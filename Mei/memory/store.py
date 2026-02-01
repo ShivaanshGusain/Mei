@@ -79,7 +79,7 @@ id                  INTEGER PRIMARY KEY AUTOINCREMENT,
 intent_pattern      TEXT UNIQUE NOT NULL,
 intent_action       TEXT NOT NULL,
 intent_target       TEXT,
-normalized_command  TEXT,
+raw_command  TEXT,
 
 plan_strategy       TEXT NOT NULL,
 plan_steps_json     TEXT NOT NULL,
@@ -399,7 +399,7 @@ class MemoryStore:
             cursor = conn.cursor()
 
             cursor.execute('''
-                           Insert into task_executions (
+                           Insert OR REPLACE into task_executions (
                            execution_id, timestamp, session_id, duration_ms,
                            raw_command, intent_action, intent_target,
                            intent_parameters, intent_confidence,
@@ -537,9 +537,13 @@ class MemoryStore:
             intent_target:Optional[str],
             plan_strategy:str,
             plan_steps:List[Dict[str,Any]],
-            normalized_command:Optional[str] = None
+            raw_command: Optional[str] = None,
+            plan_hash: Optional[str] = None,
     ) -> int:
-        plan_hash = self._generate_hash(plan_steps)
+        if not plan_hash:
+            step_str = json.dumps(plan_steps, sort_keys=True)
+            plan_hash = hashlib.md5(step_str.encode()).hexdigest()
+       
         plan_steps_json = json.dumps(plan_steps)
 
         with self.transaction() as conn:
@@ -548,7 +552,7 @@ class MemoryStore:
             cursor.execute('''
                            Insert Into plan_cache (
                            intent_pattern, intent_action, intent_target,
-                           normalized_command, plan_strategy,
+                           raw_command, plan_strategy,
                            plan_steps_json, plan_hash
                            ) Values (?, ?, ?, ?, ?, ?, ?)
                            On CONFLICT(intent_pattern) Do Update set
@@ -561,7 +565,7 @@ class MemoryStore:
                            is_valid = 1
                            ''', (
                                intent_pattern, intent_action, intent_target,
-                               normalized_command, plan_strategy,
+                               raw_command, plan_strategy,
                                plan_steps_json, plan_hash
 
                            ))
@@ -589,12 +593,14 @@ class MemoryStore:
                 return None
 
             data = self._row_to_dict(row)
+
             use_count = data.get('use_count', 0)
             success = data.get('success_count', 0)
             failure = data.get('failure_count', 0)
             
             total = success + failure
-            current_rate = (success / total) if total > 0 else 0.0
+            base = max(use_count,total)
+            current_rate = (success / base) if base > 0 else 0.0
 
             if use_count >= min_uses and current_rate >= min_success_rate:
                 cursor.execute('''
@@ -660,7 +666,7 @@ class MemoryStore:
             cursor.execute('''
                            Update plan_cache SET
                            is_valid = 0,
-                           invalidation_reason = 'SUccess rate below threshold'
+                           invalidation_reason = 'Success rate below threshold'
                            WHERE intent_pattern = ?
                            AND use_count >=5
                            AND CAST(success_count AS REAL) /
@@ -682,7 +688,7 @@ class MemoryStore:
     
     def record_command(
             self, 
-            raw_pattern:str,
+            raw_command:str,
             intent_action:str,
             intent_target: Optional[str],
             success:bool,
@@ -722,7 +728,7 @@ class MemoryStore:
                            {day_col} = {day_col} + 1,
                            {success_col} = {success_col} + 1,
                            last_occurrence = CURRENT_TIMESTAMP
-                           ''', (raw_pattern, normalized_pattern, intent_action, intent_target))
+                           ''', (raw_command, normalized_pattern, intent_action, intent_target))
             
     def get_frequent_commands(
             self,

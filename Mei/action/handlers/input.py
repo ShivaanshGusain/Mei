@@ -13,7 +13,7 @@ from ...perception.Visual.analyzer import get_visual_analyzer
 import pyautogui
 
 from ..context import ExecutionContext
-
+from ...memory.store import get_memory_store
 
 pyautogui.FAILSAFE = True
 pyautogui.PAUSE = 0.05
@@ -276,7 +276,7 @@ class ClickHandler(ActionHandler):
     def requires_visual_fallback(self)->bool:
         return True
     
-    def validate(seld, params:Dict[str,Any])->Tuple[bool, Optional[str]]:
+    def validate(self, params:Dict[str,Any])->Tuple[bool, Optional[str]]:
         has_query = 'query' in params
         has_coords = 'x' in params and 'y' in params
 
@@ -308,16 +308,47 @@ class ClickHandler(ActionHandler):
     
     def execute(self, params: Dict[str, Any], context: ExecutionContext)->ActionResult:
         try:
-            query = params('query')
+            query = params.get('query')
             x = params.get('x')
             y = params.get('y')
             click_type = params.get('click_type','left')
-            use_visual_fallback = params.get('use_visual_fallback',True)
+            use_visual_fallback = params.get('use_visual_fallback', True)
             element_type = params.get('element_type')
+
             if x is not None and y is not None:
-                return self._click_at_coords(int(x),int(y), click_type)
+                return self._click_at_coords(int(x),int(y),click_type)
             
             query = str(query).strip()
+
+
+            store = get_memory_store()
+            app_name = "unknown"
+            window_pattern = None
+            
+
+            if context.current_window:
+                app_name = context.current_window.process_name or "unknown"
+                window_pattern = self._simplify_window_title(context.current_window)
+            cached_pos = store.get_cached_element(
+                element_query=query, 
+                app_name=app_name, 
+                window_pattern=window_pattern
+            )
+            
+            if cached_pos:
+                ref = ElementReference(
+                    source="cached_persistent",
+                    bounding_box=(
+                        cached_pos['bounding_box_x'], cached_pos['bounding_box_y'],
+                        cached_pos['bounding_box_w'], cached_pos['bounding_box_h']
+                    ),
+                    ui_element=None
+                )
+                result = self._click_cached_element(ref, query, click_type)
+                result.data['used_cached_position'] = True
+                return result
+        
+                            
             cached_ref = context.get_element(query)
             if cached_ref:
                 return self._click_cached_element(cached_ref, query, click_type)
@@ -337,7 +368,7 @@ class ClickHandler(ActionHandler):
                 error = f"Element '{query} not found via UI Automation or Visual Detection if use_visual_fallback else ''",
                 method_used='none'
             )
-        
+    
         except Exception as e:
             return ActionResult(
                 success=False,
@@ -345,6 +376,23 @@ class ClickHandler(ActionHandler):
                 method_used='none'
             )
         
+    def _simplify_window_title(self,title:str)->str:
+        if not title:
+            return '%'
+        
+        if " - " in title:
+            parts = title.split(" - ")
+
+            app_part = parts[-1].strip()
+
+            if len(app_part) > 2:
+                return f"%{app_part}%"
+            
+        if len(title) < 20:
+            return f"%{title}%"
+        
+        return f"%{title[:20]}%"
+    
     def _click_at_coords(self,x:int, y:int, click_type:str)->ActionResult:
         if click_type=='left':
             pyautogui.click(x,y)
@@ -512,7 +560,8 @@ class ScrollHander(ActionHandler):
     
     def validate(self, params: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
         if "direction" not in params:
-            return (False, "Missing required parameter: 'direction'")
+            return (False, 
+            "Missing required parameter: 'direction'")
         
         direction = params["direction"]
         if direction not in ["up", "down"]:

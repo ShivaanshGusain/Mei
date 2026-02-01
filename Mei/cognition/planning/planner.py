@@ -328,6 +328,22 @@ class TaskPlanner:
             print("No intent in event")
             return
         
+        cached_plan = self._try_cached_plan(intent)
+
+        if cached_plan:
+            print(f"Using cached plan for: {intent.action} -> {intent.target}")
+            
+            emit(
+                EventType.PLAN_CREATED,
+                source="TaskPlanner",
+                plan=cached_plan,
+                intent=intent,
+                steps_count=len(cached_plan.steps),
+                from_cache=True
+            )
+            return
+    
+
         plan = self.create_plan(intent)
         
         if plan and len(plan.steps)>0:
@@ -335,7 +351,8 @@ class TaskPlanner:
                     source="TaskPlanner",
                     plan= plan,
                     intent=intent,
-                    steps_count = len(plan.steps))
+                    steps_count = len(plan.steps),
+                    from_cache = False)
             
         else:
             emit(EventType.PLAN_FAILED,
@@ -343,6 +360,91 @@ class TaskPlanner:
                     intent= intent,
                     reason= "Failed to create valid plan")
             
+    def _build_intent_pattern(self, intent:Intent)->str:
+        pattern = intent.action.lower()
+
+        if intent.target:
+            pattern += f":{intent.target.lower()}"
+
+        else:
+            pattern +=":"
+
+        variable_actions = ['search', 'type','type_text','navigate','navigate_url']
+
+        if intent.action.lower() in variable_actions:
+            pattern += "*"
+
+        return pattern
+    
+    def _try_cached_plan(self, intent:Intent)->Optional[Plan]:
+        
+        from ...memory.store import get_memory_store
+        import json
+
+        pattern = self._build_intent_pattern(intent)
+        print(f"Checking plan cache for pattern: {pattern}")
+
+        try:
+            store = get_memory_store()
+            cached = store.get_cached_plan(
+                intent_pattern= pattern,
+                min_success_rate=0.7,
+                min_uses= 2
+            )
+
+            if not cached:
+                print("No cached plan found")
+                return None
+            
+            steps_data = cached.get('plan_steps_json')
+
+            if isinstance(steps_data, str):
+                steps_data = json.load(steps_data)
+
+            if not steps_data or not isinstance(steps_data,list):
+                print("Cached plan has no valid steps")
+                return None
+            
+            steps = []
+
+            timestamp = int(time.time()*1000)
+
+            for i,step_data in enumerate(steps_data):
+                if not isinstance(step_data, dict):
+                    continue
+
+                action = step_data.get('action', "")
+                if not action or action not in VALID_ACTIONS:
+                    print("Cached plan has invalid action: {action}")
+
+                step = Step(
+                    id=f"cached_{i}_{timestamp}",
+                    action=action,
+                    parameters=step_data.get("parameters", {}),
+                    description=step_data.get("description", ""),
+                    status=StepStatus.PENDING
+                )    
+
+                steps.append(step)
+
+            if not steps:
+                return None
+            
+            plan = Plan(
+                steps=steps,
+                strategy=cached.get("plan_strategy", "cached"),
+                reasoning=f"Cached plan (used {cached.get('use_count', 0)} times, "
+                          f"success rate: {cached.get('success_count', 0)}/{cached.get('use_count', 0)})",
+                created_at=datetime.now()
+            )
+
+            print(f"Found cached plan with {len(steps)} steps")
+            return plan
+        
+        except Exception as e:
+            print(f"Error checking plan cache: {e}")
+            return None
+        
     def create_plan(self, intent: Intent)->Optional[Plan]:
         print(f"Creating plan for: {intent.action}->{intent.target}")
         
