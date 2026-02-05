@@ -317,6 +317,7 @@ class PlanExecutor:
     
         except Exception as e:
             error_msg = f"Exception during execution: {str(e)}"
+            step_duration_ms = (step.completed_at - step.started_at).total_seconds() * 1000
             step.status = StepStatus.FAILED                    
             step.error = error_msg                             
             step.completed_at = datetime.now()                 

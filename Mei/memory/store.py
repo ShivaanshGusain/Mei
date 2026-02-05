@@ -580,7 +580,6 @@ class MemoryStore:
             
             conn = self._get_connection()
             cursor = conn.cursor()
-            
             cursor.execute('''
                 SELECT * FROM plan_cache
                 WHERE intent_pattern = ?
@@ -601,15 +600,7 @@ class MemoryStore:
             total = success + failure
             base = max(use_count,total)
             current_rate = (success / base) if base > 0 else 0.0
-
             if use_count >= min_uses and current_rate >= min_success_rate:
-                cursor.execute('''
-                    UPDATE plan_cache
-                    SET last_used_at = CURRENT_TIMESTAMP,
-                        use_count = use_count + 1
-                    WHERE id = ?
-                ''', (data['id'],))
-                conn.commit()
                 return data
                 
             return None

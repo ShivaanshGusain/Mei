@@ -272,6 +272,17 @@ class FocusContext:
     app_capabilities: Dict[str, Any]     # What this app can do
     timestamp: datetime                  # When captured
     
+
+
+@dataclass
+class ErrorRecord:
+    timestamp: datetime
+    error_type: str
+    error_message: str
+    context: Dict[str, Any]
+    severity: str  # "transient", "persistent", "critical"
+
+
 @dataclass
 class AppCapabilities:
     """What an application can do."""

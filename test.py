@@ -161,7 +161,6 @@ def run_test():
     # Check what pattern was actually used
     # The pattern depends on _build_intent_pattern in planner
     expected_pattern = "open:notepad"
-    
     # First, let's see what's in the database
     with store.transaction() as conn:
         cursor = conn.cursor()
@@ -188,7 +187,7 @@ def run_test():
             print("WARNING: No plans in cache")
     
     # Try to get the cached plan
-    cached = store.get_cached_plan(expected_pattern, min_success_rate=0.0, min_uses=1)
+    cached = store.get_cached_plan(expected_pattern, min_success_rate=0.0, min_uses=28)
     
     if cached:
         print(f"SUCCESS: Plan found in cache!")
