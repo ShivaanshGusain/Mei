@@ -5,7 +5,6 @@ from typing import Dict, Any, Optional, List
 from pathlib import Path
 
 from ...core.config import get_config, ActionResult
-from ...core.task import Plan, Intent, StepStatus
 from ..context import ExecutionContext
 
 

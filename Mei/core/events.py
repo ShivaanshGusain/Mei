@@ -96,6 +96,12 @@ class EventType(Enum):
     MEMORY_SESSION_ENDED = auto()
     MEMORY_CONTEXT_UPDATED = auto()
 
+    # Teaching 
+    
+    ENTITY_LEARNED = auto()
+    ENTITY_UPDATED = auto()
+    ENTITY_ALIAS_ADDED = auto()
+    
     # User Interaction
     CONFIRMATION_NEEDED = auto()
     CONFIRMATION_RECEIVED = auto()

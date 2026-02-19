@@ -121,6 +121,52 @@ class ControlType(Enum):
     PROGRESSBAR = "ProgressBar"
     GROUP = "Group" 
 
+class EntityType(Enum):
+    URL = 'url'
+    PATH = 'path'
+    TEXT = 'text'
+    IP_ADDRESS = 'ip'
+    EMAIL = 'email'
+    APPLICATION = 'application'
+    UNKNOWN = 'unknown'
+
+class ExtractionSource(Enum):
+    CLIPBOARD = 'clipboard'
+    CONTEXT = 'context'
+    USER_PROVIDED = 'user_provided'
+    INFERRED = 'inferred'
+
+@dataclass
+class ExtractedValue:
+    success:bool
+    value:Optional[str] = None
+    entity_type: EntityType = EntityType.UNKNOWN
+    source = ExtractionSource = ExtractionSource.CLIPBOARD
+    confidence: float = 0.0
+    source_app: Optional[str] = None
+    metadata: Dict[str,Any]= field(default_factory=dict)
+
+@dataclass
+class Entity: 
+    id:Optional[int] = None
+    name:str = ""
+    canonical_name: str = ""
+    entity_type:EntityType = EntityType.UNKNOWN
+    value:str = ""
+    aliases: List[str] = field(default_factory=list)
+    context_app: Optional[str] = None
+    source: ExtractionSource = ExtractionSource.CLIPBOARD
+    source_app: Optional[str] = None
+    created_at: datetime = field(default_factory=datetime.now)
+    
+@dataclass
+class TeachingResult:
+    success:bool
+    entity:Optional[Entity] = None
+    message: str = ""
+    needs_confirmation: bool = False
+    confirmation_prompt:str = ""
+    extracted_value: Optional[ExtractedValue] = None
 @dataclass  
 class VisualConfig:
     caption_model_name: str = "florence2"

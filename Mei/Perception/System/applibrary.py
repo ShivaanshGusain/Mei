@@ -1,11 +1,18 @@
 import winreg
 import os
 import csv
+from typing import Optional, Dict, List
 from difflib import get_close_matches
 
 
+
+BROWSER_KEYWORDS = ['chrome', 'firefox', 'edge', 'safari', 'opera', 'brave', 'browser']
+EDITOR_KEYWORDS = ['code', 'studio', 'notepad', 'sublime', 'atom', 'vim', 'editor', 'ide']
+TERMINAL_KEYWORDS = ['cmd', 'powershell', 'terminal', 'bash', 'wsl', 'console']
+
 class AppLibrary:
     def __init__(self, cache_file="known_apps.csv"):
+        os.makedirs(os.path.dirname(cache_file), exist_ok=True)
         self.cache_file = cache_file
         self.apps = {}
         self._load_cache_only()
@@ -283,12 +290,32 @@ class AppLibrary:
         
         return None
 
+    def guess_category(self,app_identifier:str)->str:
+        ident = app_identifier.lower()
+        if any(k in ident for k in BROWSER_KEYWORDS): return "browser"
+        if any(k in ident for k in EDITOR_KEYWORDS): return "editor"
+        if any(k in ident for k in TERMINAL_KEYWORDS): return "terminal"
+
+        clean_name = ident.replace(".exe", "")
+        for name, path in self.apps.items():
+            if clean_name in path.lower() or clean_name in name:
+                if any(k in name for k in BROWSER_KEYWORDS): return "browser"
+                if any(k in name for k in EDITOR_KEYWORDS): return "editor"
+                
+        return "unknown"
+    
     def list_apps(self):
         """Return list of all known app names."""
         return sorted(self.apps.keys())
 
+_library_instance = None
 
-# --- TEST BLOCK ---
+def get_app_library():
+    global _library_instance
+    if _library_instance is None:
+        _library_instance = AppLibrary()
+    return _library_instance
+
 if __name__ == "__main__":
     lib = AppLibrary()
     

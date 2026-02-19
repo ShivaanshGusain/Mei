@@ -23,9 +23,75 @@ DEFAULT_MIN_USES = 2
 DEFAULT_MIN_CONFIDENCE = 0.5
 
 SCHEMA_SQL = """
+
 Create table if not Exists schema_info (
 key TEXT PRIMARY KEY,
 value TEXT NOT NULL 
+);
+
+
+
+CREATE TABLE IF NOT EXISTS entities (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    entity_type TEXT NOT NULL,
+    resolution TEXT NOT NULL,
+    keywords TEXT,
+    source_app TEXT,
+    source_context TEXT,
+    created_at TEXT NOT NULL,
+    last_used_at TEXT,
+    use_count INTEGER DEFAULT 0,
+    confidence REAL DEFAULT 1.0,
+    active INTEGER DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS entity_aliases (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    entity_id TEXT NOT NULL,
+    alias TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (entity_id) REFERENCES entities(id),
+    UNIQUE(alias)
+);
+
+CREATE TABLE IF NOT EXISTS shortcuts (
+    id TEXT PRIMARY KEY,
+    trigger_phrase TEXT NOT NULL UNIQUE,
+    action_type TEXT NOT NULL,
+    action_data TEXT NOT NULL,
+    description TEXT,
+    created_at TEXT NOT NULL,
+    last_used_at TEXT,
+    use_count INTEGER DEFAULT 0,
+    active INTEGER DEFAULT 1
+);
+
+
+CREATE TABLE IF NOT EXISTS macros (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    description TEXT,
+    steps TEXT NOT NULL,
+    trigger_phrases TEXT,
+    created_at TEXT NOT NULL,
+    last_used_at TEXT,
+    use_count INTEGER DEFAULT 0,
+    success_count INTEGER DEFAULT 0,
+    failure_count INTEGER DEFAULT 0,
+    active INTEGER DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS macro_executions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    macro_id TEXT NOT NULL,
+    started_at TEXT NOT NULL,
+    completed_at TEXT,
+    success INTEGER,
+    steps_completed INTEGER,
+    failure_reason TEXT,
+    context TEXT,
+    FOREIGN KEY (macro_id) REFERENCES macros(id)
 );
 
 Create table if not exists task_executions(
@@ -153,6 +219,35 @@ confidence          REAL DEFAULT 1.0,
 UNIQUE(element_query, app_name, window_pattern)               
 
 );
+
+Create table if not exists settings(
+key TEXT PRIMARY KEY,
+value TEXT,
+updated_at TEXT
+);
+
+Create table if not exists conversation_history(
+id INTEGER PRIMARY KEY,
+role TEXT,
+content TEXT,
+timestamp TEXT,
+session_id TEXT
+);
+
+Create table if not exists command_instances(
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+pattern_id INTEGER NOT NULL,
+raw_text TEXT NOT NULL,
+raw_text_normalized TEXT NOT NULL,
+raw_text_hash TEXT NOT NULL,
+variable_bindings TEXT,
+success_count INTEGER DEFAULT 0,
+failure_count INTEGER DEFAULT 0,
+context_app TEXT,
+created_at TEXT NOT NULL,
+last_used_at TEXT
+);
+
 
 Create table if not exists method_statistics(
 id                  INTEGER PRIMARY KEY AUTOINCREMENT,                
@@ -516,7 +611,7 @@ class MemoryStore:
                        Select * From step_executions
                        Where execution_id = ?
                        Order by step_index'''
-                       , (execution_id))
+                       , (execution_id,))
         return [self._row_to_dict(row) for row in cursor.fetchall()]
     
     def search_task_executions( self, raw_command_like:str, limit:int = 20)->List[Dict[str,Any]]:
@@ -617,7 +712,7 @@ class MemoryStore:
         if intent_target:
             cursor.execute('''
                            Select *,
-                           CAST(success_count as REAL)/ CAST(success_count + failure_count as REAL) as success_rate
+                           COALESCE(CAST(success_count AS REAL) / NULLIF(CAST(success_count + failure_count AS REAL), 0), 0.0 ) AS success_rate
                            FROM plan_cache
                            WHERE intent_action = ?
                            AND intent_target = ?
@@ -1434,8 +1529,8 @@ class MemoryStore:
             cursor.execute('''                                             
                 DELETE FROM task_executions                                
                 WHERE id NOT IN (                                          
-                    SELECT id FROM task_executions                         
-                    ORDER BY timestamp DESC                                
+                    SELECORDERT id FROM task_executions                         
+                     BY timestamp DESC                                
                     LIMIT ?                                                
                 )                                                          
             ''', (max_tasks,))                                             
@@ -1570,7 +1665,7 @@ def get_memory_store() -> MemoryStore:
 __all__ = [                                                               
     'MemoryStore',                                                        
     'get_memory_store',                                                   
-    'SCHEMA_VERSION',                                                     
+    'schema_version',                                                     
     'DEFAULT_MIN_SUCCESS_RATE',                                           
     'DEFAULT_MIN_USES',                                                   
     'DEFAULT_MIN_CONFIDENCE',                                             

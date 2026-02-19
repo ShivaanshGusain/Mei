@@ -740,7 +740,7 @@ class WorkingMemory:
             print("PLAN_FAILED but no current task")
             return
         
-        with self._lock():
+        with self._lock:
             execution_id = event.data.get('execution_id', self._current_task.task_id)
             error = event.data.get("error", "Unknown error")
             failed_step_index = event.data.get("failed_step_index")
