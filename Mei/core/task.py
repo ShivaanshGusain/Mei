@@ -348,7 +348,7 @@ class Plan:
     Contains ordered list of steps.
     """
     steps: List[Step] = field(default_factory=list)
-    strategy: str = ""                   # e.g., "reuse_window", "new_window"
+    strategy: str = "template"                   # e.g., "reuse_window", "new_window"
     reasoning: str = ""                  # Why this plan was chosen
     created_at: datetime = field(default_factory=datetime.now)
     id: Optional[str] = None

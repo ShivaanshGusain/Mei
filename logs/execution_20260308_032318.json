@@ -1,0 +1,212 @@
+{
+  "executions": [
+    {
+      "id": "session_20260308_032318",
+      "timestamp": "2026-03-08T03:23:36.409159",
+      "success": false,
+      "failure_reason": "Exception Launching app: 'ProcessManager' object has no attribute 'is_running_pid'",
+      "duration_ms": 6593.39,
+      "intent": {
+        "action": "open",
+        "target": "notepad",
+        "parameters": {},
+        "raw_command": "open notepad",
+        "confidence": 0.8
+      },
+      "plan": {
+        "strategy": "launch_notepad",
+        "reasoning": "Notepad is not running, need to launch it",
+        "step_count": 2,
+        "steps": [
+          {
+            "index": 0,
+            "action": "launch_app",
+            "parameters": {
+              "app_name": "notepad"
+            },
+            "description": "",
+            "status": "FAILED"
+          },
+          {
+            "index": 1,
+            "action": "wait",
+            "parameters": {
+              "seconds": 2,
+              "reason": "Wait for Notepad to open"
+            },
+            "description": "",
+            "status": "PENDING"
+          }
+        ]
+      },
+      "step_results": [
+        {
+          "step_index": 0,
+          "success": false,
+          "method_used": "process_manager",
+          "error": "Exception Launching app: 'ProcessManager' object has no attribute 'is_running_pid'",
+          "data_key": []
+        }
+      ],
+      "final_context": {
+        "current_window": null,
+        "variables": {
+          "launched_app": "notepad",
+          "launched_pid": 18824
+        },
+        "cached_element": []
+      }
+    },
+    {
+      "id": "session_20260308_032318",
+      "timestamp": "2026-03-08T03:23:55.540793",
+      "success": false,
+      "failure_reason": "Failed to focus window: (248) Beneath Dark Wings Ep. 22 | Epic Homebrew D&D Campaign | Beyond the Gilded Cage - YouTube - Brave",
+      "duration_ms": 67.568,
+      "intent": {
+        "action": "navigate",
+        "target": "brave",
+        "parameters": {
+          "url": "youtube.com"
+        },
+        "raw_command": "Open brave and go to youtube",
+        "confidence": 0.8
+      },
+      "plan": {
+        "strategy": "navigate_brave_with_youtube",
+        "reasoning": "Brave is already running, navigate directly to YouTube",
+        "step_count": 4,
+        "steps": [
+          {
+            "index": 0,
+            "action": "focus_window",
+            "parameters": {
+              "query": "Brave"
+            },
+            "description": "",
+            "status": "FAILED"
+          },
+          {
+            "index": 1,
+            "action": "hotkey",
+            "parameters": {
+              "keys": [
+                "ctrl",
+                "l"
+              ]
+            },
+            "description": "",
+            "status": "PENDING"
+          },
+          {
+            "index": 2,
+            "action": "type_text",
+            "parameters": {
+              "text": "youtube.com"
+            },
+            "description": "",
+            "status": "PENDING"
+          },
+          {
+            "index": 3,
+            "action": "hotkey",
+            "parameters": {
+              "keys": [
+                "enter"
+              ]
+            },
+            "description": "",
+            "status": "PENDING"
+          }
+        ]
+      },
+      "step_results": [
+        {
+          "step_index": 0,
+          "success": false,
+          "method_used": "window_manager",
+          "error": "Failed to focus window: (248) Beneath Dark Wings Ep. 22 | Epic Homebrew D&D Campaign | Beyond the Gilded Cage - YouTube - Brave",
+          "data_key": []
+        }
+      ],
+      "final_context": {
+        "current_window": null,
+        "variables": {},
+        "cached_element": []
+      }
+    },
+    {
+      "id": "session_20260308_032318",
+      "timestamp": "2026-03-08T03:24:04.269032",
+      "success": false,
+      "failure_reason": "Failed to focus window: How I Built a Real-Time Stock Data Pipeline from Scratch (with Kafka, Airflow, and Snowflake) | by DataBear | Medium - Brave",
+      "duration_ms": 2.8600000000000003,
+      "intent": {
+        "action": "navigate",
+        "target": "brave",
+        "parameters": {
+          "url": "youtube.com"
+        },
+        "raw_command": "Open brave and go to youtube",
+        "confidence": 0.8
+      },
+      "plan": {
+        "strategy": "navigate_brave_with_wait",
+        "reasoning": "Brave is already running, navigate to the URL without launching a new browser instance",
+        "step_count": 3,
+        "steps": [
+          {
+            "index": 0,
+            "action": "focus_window",
+            "parameters": {
+              "query": "Brave"
+            },
+            "description": "",
+            "status": "FAILED"
+          },
+          {
+            "index": 1,
+            "action": "wait",
+            "parameters": {
+              "seconds": 2,
+              "reason": "Wait for Brave to load"
+            },
+            "description": "",
+            "status": "PENDING"
+          },
+          {
+            "index": 2,
+            "action": "navigate_url",
+            "parameters": {
+              "url": "youtube.com"
+            },
+            "description": "",
+            "status": "PENDING"
+          }
+        ]
+      },
+      "step_results": [
+        {
+          "step_index": 0,
+          "success": false,
+          "method_used": "window_manager",
+          "error": "Failed to focus window: How I Built a Real-Time Stock Data Pipeline from Scratch (with Kafka, Airflow, and Snowflake) | by DataBear | Medium - Brave",
+          "data_key": []
+        }
+      ],
+      "final_context": {
+        "current_window": null,
+        "variables": {},
+        "cached_element": []
+      }
+    }
+  ],
+  "metadata": {
+    "version": "1.0",
+    "created_at": "2026-03-08T03:23:18.358956",
+    "last_updated": "2026-03-08T03:24:04.269032",
+    "total_executions": 3,
+    "total_success": 0,
+    "total_failures": 3
+  }
+}

@@ -11,7 +11,7 @@ def get_all_handlers():
     handlers.extend(get_app_handlers())
     handlers.extend(get_input_handlers())
     handlers.extend(get_navigation_handlers())
-    handlers.extend(get_utility_handlers())
+    handlers.extend(get_util_handers())
     return handlers
 
 __all__ = [
@@ -19,7 +19,6 @@ __all__ = [
     'get_app_handlers', 'APP_HANDLERS',
     'get_input_handlers', 'INPUT_HANDLERS',
     'get_navigation_handlers', 'NAVIGATION_HANDLERS',
-    'get_util_handlers', 'UTILITY_HANDLERS',
+    'get_util_handers', 'UTIL_HANDLERS',
     'get_all_handlers',
 ]
-

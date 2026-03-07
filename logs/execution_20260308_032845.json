@@ -1,0 +1,181 @@
+{
+  "executions": [
+    {
+      "id": "session_20260308_032845",
+      "timestamp": "2026-03-08T03:29:08.083218",
+      "success": false,
+      "failure_reason": "Failed to launch 'notepad'.\n App may not be installed or path not found",
+      "duration_ms": 10065.564,
+      "intent": {
+        "action": "open",
+        "target": "notepad",
+        "parameters": {},
+        "raw_command": "open notepad",
+        "confidence": 0.8
+      },
+      "plan": {
+        "strategy": "launch_notepad",
+        "reasoning": "Notepad is not running, need to launch it",
+        "step_count": 2,
+        "steps": [
+          {
+            "index": 0,
+            "action": "launch_app",
+            "parameters": {
+              "app_name": "notepad"
+            },
+            "description": "",
+            "status": "FAILED"
+          },
+          {
+            "index": 1,
+            "action": "wait",
+            "parameters": {
+              "seconds": 2,
+              "reason": "Wait for Notepad to open"
+            },
+            "description": "",
+            "status": "PENDING"
+          }
+        ]
+      },
+      "step_results": [
+        {
+          "step_index": 0,
+          "success": false,
+          "method_used": "process_manager",
+          "error": "Failed to launch 'notepad'.\n App may not be installed or path not found",
+          "data_key": []
+        }
+      ],
+      "final_context": {
+        "current_window": null,
+        "variables": {},
+        "cached_element": []
+      }
+    },
+    {
+      "id": "session_20260308_032845",
+      "timestamp": "2026-03-08T03:29:24.324633",
+      "success": true,
+      "failure_reason": null,
+      "duration_ms": 3099.262,
+      "intent": {
+        "action": "navigate",
+        "target": "brave",
+        "parameters": {
+          "url": "youtube.com"
+        },
+        "raw_command": "Open brave and go to youtube",
+        "confidence": 0.8
+      },
+      "plan": {
+        "strategy": "navigate_existing_brave",
+        "reasoning": "Brave is already running, navigate directly to the URL",
+        "step_count": 1,
+        "steps": [
+          {
+            "index": 0,
+            "action": "navigate_url",
+            "parameters": {
+              "url": "youtube.com"
+            },
+            "description": "",
+            "status": "COMPLETED"
+          }
+        ]
+      },
+      "step_results": [
+        {
+          "step_index": 0,
+          "success": true,
+          "method_used": "browser_navigation",
+          "error": null,
+          "data_key": [
+            "url",
+            "browser",
+            "new_tab",
+            "window_title"
+          ]
+        }
+      ],
+      "final_context": {
+        "current_window": {
+          "hwnd": 724206,
+          "title": "(248) Beneath Dark Wings Ep. 22 | Epic Homebrew D&D Campaign | Beyond the Gilded Cage - YouTube - Brave",
+          "process": "brave.exe"
+        },
+        "variables": {
+          "navigate_url": "https://youtube.com"
+        },
+        "cached_element": []
+      }
+    },
+    {
+      "id": "session_20260308_032845",
+      "timestamp": "2026-03-08T03:29:31.852389",
+      "success": true,
+      "failure_reason": null,
+      "duration_ms": 2977.145,
+      "intent": {
+        "action": "navigate",
+        "target": "brave",
+        "parameters": {
+          "url": "youtube.com"
+        },
+        "raw_command": "Open brave and go to youtube",
+        "confidence": 0.8
+      },
+      "plan": {
+        "strategy": "navigate_existing_brave",
+        "reasoning": "Brave is already running, navigate directly to the URL",
+        "step_count": 1,
+        "steps": [
+          {
+            "index": 0,
+            "action": "navigate_url",
+            "parameters": {
+              "url": "youtube.com"
+            },
+            "description": "",
+            "status": "COMPLETED"
+          }
+        ]
+      },
+      "step_results": [
+        {
+          "step_index": 0,
+          "success": true,
+          "method_used": "browser_navigation",
+          "error": null,
+          "data_key": [
+            "url",
+            "browser",
+            "new_tab",
+            "window_title"
+          ]
+        }
+      ],
+      "final_context": {
+        "current_window": {
+          "hwnd": 724206,
+          "title": "(248) /youtube.com - YouTube - Brave",
+          "process": "brave.exe"
+        },
+        "variables": {
+          "navigate_url": "https://youtube.com"
+        },
+        "cached_element": []
+      }
+    }
+  ],
+  "metadata": {
+    "version": "1.0",
+    "created_at": "2026-03-08T03:28:45.031543",
+    "last_updated": "2026-03-08T03:29:31.852389",
+    "total_executions": 3,
+    "total_success": 0,
+    "total_failures": 1,
+    "total_successes": 2
+  }
+}

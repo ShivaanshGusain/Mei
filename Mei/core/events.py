@@ -74,6 +74,8 @@ class EventType(Enum):
     GOAL_REJECTED = auto()
     MEMORY_PLAN_FOUND = auto()
     MEMORY_PLAN_NOT_FOUND = auto()
+    MEMORY_CLOSED = auto()
+    MEMORY_MIGRATED = auto()
 
     ACTION_STARTED = auto()
     ACTION_COMPLETED = auto()

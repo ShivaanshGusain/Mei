@@ -102,10 +102,11 @@ class FindElementHandler(ActionHandler):
         return True
     
     def validate(self, params:Dict[str,Any])-> Tuple[bool, Optional[str]]:
-        if 'query' not in params:
-            return (False, "Missing required parameter: 'query'")
+        has_query = 'query' in params or 'element_name' in params
+        if not has_query:
+            return (False, "Missing required parameter: 'query' or 'element_name'")
         
-        query = params['query']
+        query = params.get('query') or params.get('element_name')
         if query is None or str(query).strip() == "":
             return (False, "Parameter 'query' cannot be empty")
         
@@ -122,7 +123,7 @@ class FindElementHandler(ActionHandler):
     
     def execute(self, params:Dict[str,Any], context:ExecutionContext)->ActionResult:
         try:
-            query = str(params['query']).strip()
+            query = str(params.get('query') or params.get('element_name', '')).strip()
             element_type = params.get('element_type')
             timeout = params.get('timeout', DEFAULT_FIND_TIMEOUT)
             use_visual = params.get('use_visual', True)
@@ -184,6 +185,13 @@ class FindElementHandler(ActionHandler):
                             method_used='visual'
                         )
                 time.sleep(FIND_RETRY_INTERVAL)
+            
+            # Timeout — element not found after all attempts
+            return ActionResult(
+                success=False,
+                error=f"Element '{query}' not found after {attempt} attempts ({timeout}s timeout)",
+                method_used='none'
+            )
 
         except Exception as e:
             return ActionResult(
@@ -191,6 +199,7 @@ class FindElementHandler(ActionHandler):
                 error=f"Exception finding element: {str(e)}",
                 method_used='none'
             )
+
         
     def _find_via_ui_automation(self, query:str, element_type:Optional[str], hwnd:int)->Optional[Tuple[UIElement, ElementReference]]:
         try:

@@ -143,18 +143,24 @@ class WindowManager:
                         return (window,tab)
         return None
     
-    def focus_window(self, hwnd: int)-> bool:
-        if not win32gui.IsWindow(hwnd):
-            return False
-        if win32gui.IsIconic(hwnd):
-            win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
+    def focus_window(self, hwnd: int) -> bool:
+        import win32com.client        
         try:
-            self._force_foreground(hwnd)
-            self._update_focus_history(hwnd)
+            # 1. If the window is minimized, restore it first
+            if win32gui.IsIconic(hwnd):
+                win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
+            
+            # 2. Bypass Windows Foreground Lock with the "Alt-Key Trick"
+            # This tricks Windows into thinking the user is interacting with the system
+            shell = win32com.client.Dispatch("WScript.Shell")
+            shell.SendKeys('%') # Send a dummy ALT key press
+            
+            # 3. Now bring it to the front
+            win32gui.SetForegroundWindow(hwnd)
             return True
-        except:
-            return False
-        
+        except Exception as e:
+            print(f"[WindowManager] Failed to focus hwnd {hwnd}: {e}")
+            return False        
     def _force_foreground(self, hwnd: int) -> None:
         try:
             foreground_hwnd = win32gui.GetForegroundWindow()

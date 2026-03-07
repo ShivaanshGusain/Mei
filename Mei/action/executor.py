@@ -257,18 +257,19 @@ class PlanExecutor:
                 step.status = StepStatus.FAILED
                 step.error = error_msg
                 step.completed_at = datetime.now()
+                step_duration_ms = (step.completed_at - step.started_at).total_seconds() * 1000
                 print(f"Execution failed: {error_msg}")
                 print(f"Method used: {result.method_used}")
                 emit(
                     EventType.PLAN_STEP_FAILED,
                     source='Executor',
                     step_index=step_index,
-                    action=step.action,                   # ADD
-                    parameters=step.parameters,           # ADD
+                    action=step.action,
+                    parameters=step.parameters,
                     error=error_msg,
-                    method_used=result.method_used,       # Already present
-                    duration_ms=step_duration_ms,         # ADD
-                    data=result.data                      # ADD: may contain partial info
+                    method_used=result.method_used,
+                    duration_ms=step_duration_ms,
+                    data=result.data
                 )                
                 return (False, error_msg)
             
@@ -317,10 +318,10 @@ class PlanExecutor:
     
         except Exception as e:
             error_msg = f"Exception during execution: {str(e)}"
-            step_duration_ms = (step.completed_at - step.started_at).total_seconds() * 1000
             step.status = StepStatus.FAILED                    
             step.error = error_msg                             
-            step.completed_at = datetime.now()                 
+            step.completed_at = datetime.now()
+            step_duration_ms = (step.completed_at - step.started_at).total_seconds() * 1000
             print(f"    ✗ Exception: {e}")                     
             emit(
                 EventType.PLAN_STEP_FAILED,

@@ -1,0 +1,225 @@
+{
+  "executions": [
+    {
+      "id": "session_20260308_034040",
+      "timestamp": "2026-03-08T03:41:04.699924",
+      "success": true,
+      "failure_reason": null,
+      "duration_ms": 11355.176,
+      "intent": {
+        "action": "open",
+        "target": "notepad",
+        "parameters": {},
+        "raw_command": "open notepad",
+        "confidence": 0.8
+      },
+      "plan": {
+        "strategy": "launch_notepad",
+        "reasoning": "Notepad is not running, need to launch it",
+        "step_count": 2,
+        "steps": [
+          {
+            "index": 0,
+            "action": "launch_app",
+            "parameters": {
+              "app_name": "notepad"
+            },
+            "description": "",
+            "status": "COMPLETED"
+          },
+          {
+            "index": 1,
+            "action": "wait",
+            "parameters": {
+              "seconds": 2,
+              "reason": "Wait for Notepad to open"
+            },
+            "description": "",
+            "status": "COMPLETED"
+          }
+        ]
+      },
+      "step_results": [
+        {
+          "step_index": 0,
+          "success": true,
+          "method_used": "process_manager",
+          "error": null,
+          "data_key": [
+            "app_name",
+            "pid",
+            "already_running",
+            "window_found",
+            "hwnd",
+            "title"
+          ]
+        },
+        {
+          "step_index": 1,
+          "success": true,
+          "method_used": "time_sleep",
+          "error": null,
+          "data_key": [
+            "requested_seconds",
+            "actual_seconds",
+            "reason"
+          ]
+        }
+      ],
+      "final_context": {
+        "current_window": null,
+        "variables": {
+          "launched_app": "notepad",
+          "launched_pid": 15156,
+          "last_wait_seconds": 2.0,
+          "last_wait_reason": "Wait for Notepad to open"
+        },
+        "cached_element": []
+      }
+    },
+    {
+      "id": "session_20260308_034040",
+      "timestamp": "2026-03-08T03:41:27.474503",
+      "success": true,
+      "failure_reason": null,
+      "duration_ms": 3123.148,
+      "intent": {
+        "action": "navigate",
+        "target": "brave",
+        "parameters": {
+          "url": "youtube.com"
+        },
+        "raw_command": "Open brave and go to youtube",
+        "confidence": 0.8
+      },
+      "plan": {
+        "strategy": "navigate_existing_brave",
+        "reasoning": "Brave is already running, navigate directly to the URL",
+        "step_count": 2,
+        "steps": [
+          {
+            "index": 0,
+            "action": "focus_window",
+            "parameters": {
+              "query": "New Tab - Brave"
+            },
+            "description": "",
+            "status": "COMPLETED"
+          },
+          {
+            "index": 1,
+            "action": "navigate_url",
+            "parameters": {
+              "url": "youtube.com"
+            },
+            "description": "",
+            "status": "COMPLETED"
+          }
+        ]
+      },
+      "step_results": [
+        {
+          "step_index": 0,
+          "success": true,
+          "method_used": "window_manager",
+          "error": null,
+          "data_key": [
+            "hwnd",
+            "title",
+            "process"
+          ]
+        },
+        {
+          "step_index": 1,
+          "success": true,
+          "method_used": "browser_navigation",
+          "error": null,
+          "data_key": [
+            "url",
+            "browser",
+            "new_tab",
+            "window_title"
+          ]
+        }
+      ],
+      "final_context": {
+        "current_window": {
+          "hwnd": 724206,
+          "title": "New Tab - Brave",
+          "process": "brave.exe"
+        },
+        "variables": {
+          "step_0_verify_failed": "Window is still maximized",
+          "navigate_url": "https://youtube.com"
+        },
+        "cached_element": []
+      }
+    },
+    {
+      "id": "session_20260308_034040",
+      "timestamp": "2026-03-08T03:41:35.040342",
+      "success": true,
+      "failure_reason": null,
+      "duration_ms": 2988.697,
+      "intent": {
+        "action": "navigate",
+        "target": "brave",
+        "parameters": {
+          "url": "youtube.com"
+        },
+        "raw_command": "Open brave and go to youtube",
+        "confidence": 0.8
+      },
+      "plan": {
+        "strategy": "navigate_existing_brave",
+        "reasoning": "Brave is already running with YouTube, navigate directly",
+        "step_count": 1,
+        "steps": [
+          {
+            "index": 0,
+            "action": "navigate_url",
+            "parameters": {
+              "url": "youtube.com"
+            },
+            "description": "",
+            "status": "COMPLETED"
+          }
+        ]
+      },
+      "step_results": [
+        {
+          "step_index": 0,
+          "success": true,
+          "method_used": "browser_navigation",
+          "error": null,
+          "data_key": [
+            "url",
+            "browser",
+            "new_tab",
+            "window_title"
+          ]
+        }
+      ],
+      "final_context": {
+        "current_window": {
+          "hwnd": 724206,
+          "title": "(248) YouTube - Brave",
+          "process": "brave.exe"
+        },
+        "variables": {
+          "navigate_url": "https://youtube.com"
+        },
+        "cached_element": []
+      }
+    }
+  ],
+  "metadata": {
+    "version": "1.0",
+    "created_at": "2026-03-08T03:40:40.784467",
+    "last_updated": "2026-03-08T03:41:35.040342",
+    "total_executions": 3,
+    "total_success": 0,
+    "total_failures": 0,
+    "total_successes": 3
+  }
+}

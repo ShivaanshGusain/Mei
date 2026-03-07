@@ -20,6 +20,13 @@ class ProcessManager:
                 continue
         return result
     
+    def is_running_pid(self, pid: int) -> bool:
+        try:
+            import psutil
+            return psutil.pid_exists(pid) and psutil.Process(pid).is_running()
+        except Exception:
+            return False
+
     def is_running(self, name:str) -> bool:
         name = self._normalized_name(name)
         for process in psutil.process_iter(attrs=['name']):

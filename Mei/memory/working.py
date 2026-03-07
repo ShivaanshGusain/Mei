@@ -55,6 +55,20 @@ class WorkingMemory:
         if auto_subscribe:
             self._subscribe_to_events()
 
+    def _build_intent_pattern(self, intent: Intent) -> str:
+        """Helper to build pattern strings for cache lookups."""
+        pattern = intent.action.lower()
+        if intent.target:
+            pattern += f":{intent.target.lower()}"
+        else:
+            pattern += ":"
+
+        variable_actions = ['search', 'type', 'type_text', 'navigate', 'navigate_url']
+        if intent.action.lower() in variable_actions:
+            pattern += "*"
+
+        return pattern
+    
     def get_focus_context(self, refresh:bool = True)-> FocusContext:
         if refresh or self._focus_context is None:
             self._refresh_focus_context()
@@ -147,14 +161,12 @@ class WorkingMemory:
             "chrome.exe": AppCapabilities(
                 has_search=True, search_hotkey="Ctrl+F",
                 has_undo=True, undo_hotkey="Ctrl+Z",
-                has_redo=True, redo_hotkey="Ctrl+Y",
                 has_save=False
             ),
             "code.exe": AppCapabilities(
                 has_search=True, search_hotkey="Ctrl+F",
                 has_replace=True, replace_hotkey="Ctrl+H",
                 has_undo=True, undo_hotkey="Ctrl+Z",
-                has_redo=True, redo_hotkey="Ctrl+Shift+Z",
                 has_save=True, save_hotkey="Ctrl+S"
             ),
             "notepad.exe": AppCapabilities(
@@ -791,7 +803,6 @@ class WorkingMemory:
             )
 
             self._last_activity = datetime.now()
-
     def _persist_completed_task(
             self, 
             execution_id:str, 
@@ -886,18 +897,6 @@ class WorkingMemory:
         except Exception as e:
             print(f"Failed to record command: {e}")
 
-    def _build_intent_pattern(self, intent:Intent)->str:
-        pattern = intent.action.lower()
-
-        if intent.target:
-            pattern += f":{intent.target.lower()}"
-
-        variable_action = ['search', 'type','navigate']
-
-        if intent.action.lower() in variable_action:
-            pattern += ":*"
-
-        return pattern
     
     def _on_agent_stopped(self,event:Event)->None:
         if not self._is_active:

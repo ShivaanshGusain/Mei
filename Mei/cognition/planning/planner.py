@@ -604,12 +604,14 @@ Original command: "{intent.raw_command}"
     
 
 _planner_instance: Optional[TaskPlanner] = None
-def get_planner(auto_subscribe: bool = True)->TaskPlanner:
+def get_planner(auto_subscribe: bool = False) -> TaskPlanner:
     global _planner_instance
     if _planner_instance is None:
         _planner_instance = TaskPlanner(auto_subscribe=auto_subscribe)
     return _planner_instance
 
+def generate_plan(intent: Intent) -> Optional[Plan]:
+    return get_planner(auto_subscribe=False).create_plan(intent)
 
 if __name__ == "__main__":
     from ..nlu.intent import extract_intent

@@ -1,0 +1,439 @@
+{
+  "executions": [
+    {
+      "id": "session_20260308_050634",
+      "timestamp": "2026-03-08T05:07:06.070502",
+      "success": true,
+      "failure_reason": null,
+      "duration_ms": 3561.654,
+      "intent": {
+        "action": "navigate",
+        "target": "Brave",
+        "parameters": {
+          "url": "youtube.com",
+          "new_tab": true
+        },
+        "raw_command": "Open Brave and go to YouTube in new tab.",
+        "confidence": 0.8
+      },
+      "plan": {
+        "strategy": "navigate_in_existing_browser",
+        "reasoning": "Brave is already running, use it to navigate to YouTube in a new tab",
+        "step_count": 3,
+        "steps": [
+          {
+            "index": 0,
+            "action": "focus_window",
+            "parameters": {
+              "query": "Brave"
+            },
+            "description": "",
+            "status": "COMPLETED"
+          },
+          {
+            "index": 1,
+            "action": "hotkey",
+            "parameters": {
+              "keys": [
+                "ctrl",
+                "t"
+              ]
+            },
+            "description": "",
+            "status": "COMPLETED"
+          },
+          {
+            "index": 2,
+            "action": "navigate_url",
+            "parameters": {
+              "url": "youtube.com"
+            },
+            "description": "",
+            "status": "COMPLETED"
+          }
+        ]
+      },
+      "step_results": [
+        {
+          "step_index": 0,
+          "success": true,
+          "method_used": "window_manager",
+          "error": null,
+          "data_key": [
+            "hwnd",
+            "title",
+            "process"
+          ]
+        },
+        {
+          "step_index": 1,
+          "success": true,
+          "method_used": "pyautogui",
+          "error": null,
+          "data_key": [
+            "keys",
+            "key_count"
+          ]
+        },
+        {
+          "step_index": 2,
+          "success": true,
+          "method_used": "browser_navigation",
+          "error": null,
+          "data_key": [
+            "url",
+            "browser",
+            "new_tab",
+            "window_title"
+          ]
+        }
+      ],
+      "final_context": {
+        "current_window": {
+          "hwnd": 10684016,
+          "title": "untitled-1.asm* - Sim8085 - Brave",
+          "process": "brave.exe"
+        },
+        "variables": {
+          "step_0_verify_failed": "Window is still maximized",
+          "last_hotkey": [
+            "ctrl",
+            "t"
+          ],
+          "navigate_url": "https://youtube.com"
+        },
+        "cached_element": []
+      }
+    },
+    {
+      "id": "session_20260308_050634",
+      "timestamp": "2026-03-08T05:07:24.389143",
+      "success": true,
+      "failure_reason": null,
+      "duration_ms": 3454.2540000000004,
+      "intent": {
+        "action": "navigate",
+        "target": "Brave",
+        "parameters": {
+          "url": "youtube.com",
+          "new_tab": true
+        },
+        "raw_command": "Open Brave and go to YouTube in new time.",
+        "confidence": 0.8
+      },
+      "plan": {
+        "strategy": "navigate_in_new_tab",
+        "reasoning": "Brave is running, open a new tab and navigate to YouTube",
+        "step_count": 3,
+        "steps": [
+          {
+            "index": 0,
+            "action": "focus_window",
+            "parameters": {
+              "query": "Brave"
+            },
+            "description": "",
+            "status": "COMPLETED"
+          },
+          {
+            "index": 1,
+            "action": "hotkey",
+            "parameters": {
+              "keys": [
+                "ctrl",
+                "t"
+              ]
+            },
+            "description": "",
+            "status": "COMPLETED"
+          },
+          {
+            "index": 2,
+            "action": "navigate_url",
+            "parameters": {
+              "url": "youtube.com"
+            },
+            "description": "",
+            "status": "COMPLETED"
+          }
+        ]
+      },
+      "step_results": [
+        {
+          "step_index": 0,
+          "success": true,
+          "method_used": "window_manager",
+          "error": null,
+          "data_key": [
+            "hwnd",
+            "title",
+            "process"
+          ]
+        },
+        {
+          "step_index": 1,
+          "success": true,
+          "method_used": "pyautogui",
+          "error": null,
+          "data_key": [
+            "keys",
+            "key_count"
+          ]
+        },
+        {
+          "step_index": 2,
+          "success": true,
+          "method_used": "browser_navigation",
+          "error": null,
+          "data_key": [
+            "url",
+            "browser",
+            "new_tab",
+            "window_title"
+          ]
+        }
+      ],
+      "final_context": {
+        "current_window": {
+          "hwnd": 8260720,
+          "title": "How I Built a Real-Time Stock Data Pipeline from Scratch (with Kafka, Airflow, and Snowflake) | by DataBear | Medium - Brave",
+          "process": "brave.exe"
+        },
+        "variables": {
+          "step_0_verify_failed": "Window is still maximized",
+          "last_hotkey": [
+            "ctrl",
+            "t"
+          ],
+          "navigate_url": "https://youtube.com"
+        },
+        "cached_element": []
+      }
+    },
+    {
+      "id": "session_20260308_050634",
+      "timestamp": "2026-03-08T05:07:58.534005",
+      "success": false,
+      "failure_reason": "Failed to launch 'brief'.\n App may not be installed or path not found",
+      "duration_ms": 4624.841,
+      "intent": {
+        "action": "open",
+        "target": "brief",
+        "parameters": {},
+        "raw_command": "open brief",
+        "confidence": 0.8
+      },
+      "plan": {
+        "strategy": "launch_brief",
+        "reasoning": "Brief application is not running, need to launch it",
+        "step_count": 2,
+        "steps": [
+          {
+            "index": 0,
+            "action": "launch_app",
+            "parameters": {
+              "app_name": "brief"
+            },
+            "description": "",
+            "status": "FAILED"
+          },
+          {
+            "index": 1,
+            "action": "wait",
+            "parameters": {
+              "seconds": 2,
+              "reason": "Wait for Brief to open"
+            },
+            "description": "",
+            "status": "PENDING"
+          }
+        ]
+      },
+      "step_results": [
+        {
+          "step_index": 0,
+          "success": false,
+          "method_used": "process_manager",
+          "error": "Failed to launch 'brief'.\n App may not be installed or path not found",
+          "data_key": []
+        }
+      ],
+      "final_context": {
+        "current_window": null,
+        "variables": {},
+        "cached_element": []
+      }
+    },
+    {
+      "id": "session_20260308_050634",
+      "timestamp": "2026-03-08T05:08:09.140772",
+      "success": false,
+      "failure_reason": "Failed to launch 'brief'.\n App may not be installed or path not found",
+      "duration_ms": 34.013,
+      "intent": {
+        "action": "open",
+        "target": "brief",
+        "parameters": {},
+        "raw_command": "Open brief.",
+        "confidence": 0.8
+      },
+      "plan": {
+        "strategy": "launch_brief",
+        "reasoning": "Brief application is not running, need to launch it",
+        "step_count": 2,
+        "steps": [
+          {
+            "index": 0,
+            "action": "launch_app",
+            "parameters": {
+              "app_name": "brief"
+            },
+            "description": "",
+            "status": "FAILED"
+          },
+          {
+            "index": 1,
+            "action": "wait",
+            "parameters": {
+              "seconds": 2,
+              "reason": "Wait for Brief to open"
+            },
+            "description": "",
+            "status": "PENDING"
+          }
+        ]
+      },
+      "step_results": [
+        {
+          "step_index": 0,
+          "success": false,
+          "method_used": "process_manager",
+          "error": "Failed to launch 'brief'.\n App may not be installed or path not found",
+          "data_key": []
+        }
+      ],
+      "final_context": {
+        "current_window": null,
+        "variables": {},
+        "cached_element": []
+      }
+    },
+    {
+      "id": "session_20260308_050634",
+      "timestamp": "2026-03-08T05:08:19.884273",
+      "success": false,
+      "failure_reason": "Failed to launch 'breven'.\n App may not be installed or path not found",
+      "duration_ms": 27.834,
+      "intent": {
+        "action": "open",
+        "target": "breven",
+        "parameters": {},
+        "raw_command": "Open breven.",
+        "confidence": 0.8
+      },
+      "plan": {
+        "strategy": "launch_breven",
+        "reasoning": "Breven is not running, need to launch it",
+        "step_count": 2,
+        "steps": [
+          {
+            "index": 0,
+            "action": "launch_app",
+            "parameters": {
+              "app_name": "breven"
+            },
+            "description": "",
+            "status": "FAILED"
+          },
+          {
+            "index": 1,
+            "action": "wait",
+            "parameters": {
+              "seconds": 2,
+              "reason": "Wait for Breven to open"
+            },
+            "description": "",
+            "status": "PENDING"
+          }
+        ]
+      },
+      "step_results": [
+        {
+          "step_index": 0,
+          "success": false,
+          "method_used": "process_manager",
+          "error": "Failed to launch 'breven'.\n App may not be installed or path not found",
+          "data_key": []
+        }
+      ],
+      "final_context": {
+        "current_window": null,
+        "variables": {},
+        "cached_element": []
+      }
+    },
+    {
+      "id": "session_20260308_050634",
+      "timestamp": "2026-03-08T05:08:30.830025",
+      "success": false,
+      "failure_reason": "Failed to launch 'vivandi'.\n App may not be installed or path not found",
+      "duration_ms": 28.080000000000002,
+      "intent": {
+        "action": "open",
+        "target": "Vivandi",
+        "parameters": {},
+        "raw_command": "Open Vivandi",
+        "confidence": 0.8
+      },
+      "plan": {
+        "strategy": "launch_vivandi",
+        "reasoning": "Vivandi is not running, need to launch it",
+        "step_count": 2,
+        "steps": [
+          {
+            "index": 0,
+            "action": "launch_app",
+            "parameters": {
+              "app_name": "vivandi"
+            },
+            "description": "",
+            "status": "FAILED"
+          },
+          {
+            "index": 1,
+            "action": "wait",
+            "parameters": {
+              "seconds": 2,
+              "reason": "Wait for Vivandi to open"
+            },
+            "description": "",
+            "status": "PENDING"
+          }
+        ]
+      },
+      "step_results": [
+        {
+          "step_index": 0,
+          "success": false,
+          "method_used": "process_manager",
+          "error": "Failed to launch 'vivandi'.\n App may not be installed or path not found",
+          "data_key": []
+        }
+      ],
+      "final_context": {
+        "current_window": null,
+        "variables": {},
+        "cached_element": []
+      }
+    }
+  ],
+  "metadata": {
+    "version": "1.0",
+    "created_at": "2026-03-08T05:06:34.721976",
+    "last_updated": "2026-03-08T05:08:30.830025",
+    "total_executions": 6,
+    "total_success": 0,
+    "total_failures": 4,
+    "total_successes": 2
+  }
+}

@@ -1,0 +1,750 @@
+{
+  "executions": [
+    {
+      "id": "session_20260308_041418",
+      "timestamp": "2026-03-08T04:15:09.508223",
+      "success": true,
+      "failure_reason": null,
+      "duration_ms": 15641.777,
+      "intent": {
+        "action": "create",
+        "target": "file",
+        "parameters": {
+          "name": "my name",
+          "type": "file",
+          "location": "desktop"
+        },
+        "raw_command": "Create a text file called my name in desktop",
+        "confidence": 0.8
+      },
+      "plan": {
+        "strategy": "create_file_in_desktop",
+        "reasoning": "File creation is required, and the target app (file creation) is not running.",
+        "step_count": 5,
+        "steps": [
+          {
+            "index": 0,
+            "action": "launch_app",
+            "parameters": {
+              "app_name": "notepad"
+            },
+            "description": "",
+            "status": "COMPLETED"
+          },
+          {
+            "index": 1,
+            "action": "wait",
+            "parameters": {
+              "seconds": 2,
+              "reason": "Wait for Notepad to open"
+            },
+            "description": "",
+            "status": "COMPLETED"
+          },
+          {
+            "index": 2,
+            "action": "type_text",
+            "parameters": {
+              "text": "my name",
+              "element_query": "text area",
+              "clear_first": true
+            },
+            "description": "",
+            "status": "COMPLETED"
+          },
+          {
+            "index": 3,
+            "action": "navigate_url",
+            "parameters": {
+              "url": "file:\\\\%USERPROFILE\\\\Desktop\\\\my name.txt"
+            },
+            "description": "",
+            "status": "COMPLETED"
+          },
+          {
+            "index": 4,
+            "action": "close_window",
+            "parameters": {
+              "query": "notepad"
+            },
+            "description": "",
+            "status": "COMPLETED"
+          }
+        ]
+      },
+      "step_results": [
+        {
+          "step_index": 0,
+          "success": true,
+          "method_used": "process_manager",
+          "error": null,
+          "data_key": [
+            "app_name",
+            "pid",
+            "already_running",
+            "window_found",
+            "hwnd",
+            "title"
+          ]
+        },
+        {
+          "step_index": 1,
+          "success": true,
+          "method_used": "time_sleep",
+          "error": null,
+          "data_key": [
+            "requested_seconds",
+            "actual_seconds",
+            "reason"
+          ]
+        },
+        {
+          "step_index": 2,
+          "success": true,
+          "method_used": "pyautogui",
+          "error": null,
+          "data_key": [
+            "text_length",
+            "text_preview",
+            "clear_first"
+          ]
+        },
+        {
+          "step_index": 3,
+          "success": true,
+          "method_used": "browser_navigation",
+          "error": null,
+          "data_key": [
+            "url",
+            "browser",
+            "new_tab",
+            "window_title"
+          ]
+        },
+        {
+          "step_index": 4,
+          "success": true,
+          "method_used": "window_manager",
+          "error": null,
+          "data_key": [
+            "hwnd",
+            "title",
+            "closed"
+          ]
+        }
+      ],
+      "final_context": {
+        "current_window": {
+          "hwnd": 265434,
+          "title": "untitled-1.asm* - Sim8085 - Brave",
+          "process": "brave.exe"
+        },
+        "variables": {
+          "launched_app": "notepad",
+          "launched_pid": 21728,
+          "last_wait_seconds": 2.0,
+          "last_wait_reason": "Wait for Notepad to open",
+          "typed_text": "my name",
+          "navigate_url": "file:\\\\%USERPROFILE\\\\Desktop\\\\my name.txt"
+        },
+        "cached_element": []
+      }
+    },
+    {
+      "id": "session_20260308_041418",
+      "timestamp": "2026-03-08T04:15:51.006056",
+      "success": true,
+      "failure_reason": null,
+      "duration_ms": 1777.013,
+      "intent": {
+        "action": "create",
+        "target": "file",
+        "parameters": {
+          "name": "my name",
+          "type": "file",
+          "location": "desktop"
+        },
+        "raw_command": "create a text file called my name in the desktop",
+        "confidence": 0.8
+      },
+      "plan": {
+        "strategy": "create_file_in_desktop",
+        "reasoning": "File needs to be created in the desktop, which is accessible from File Explorer",
+        "step_count": 3,
+        "steps": [
+          {
+            "index": 0,
+            "action": "focus_window",
+            "parameters": {
+              "query": "Desktop - File Explorer"
+            },
+            "description": "",
+            "status": "COMPLETED"
+          },
+          {
+            "index": 1,
+            "action": "type_text",
+            "parameters": {
+              "text": "my name.txt",
+              "element_query": "new file"
+            },
+            "description": "",
+            "status": "COMPLETED"
+          },
+          {
+            "index": 2,
+            "action": "wait",
+            "parameters": {
+              "seconds": 1,
+              "reason": "Wait for file creation"
+            },
+            "description": "",
+            "status": "COMPLETED"
+          }
+        ]
+      },
+      "step_results": [
+        {
+          "step_index": 0,
+          "success": true,
+          "method_used": "window_manager",
+          "error": null,
+          "data_key": [
+            "hwnd",
+            "title",
+            "process"
+          ]
+        },
+        {
+          "step_index": 1,
+          "success": true,
+          "method_used": "pyautogui",
+          "error": null,
+          "data_key": [
+            "text_length",
+            "text_preview",
+            "clear_first"
+          ]
+        },
+        {
+          "step_index": 2,
+          "success": true,
+          "method_used": "time_sleep",
+          "error": null,
+          "data_key": [
+            "requested_seconds",
+            "actual_seconds",
+            "reason"
+          ]
+        }
+      ],
+      "final_context": {
+        "current_window": {
+          "hwnd": 10552944,
+          "title": "Desktop - File Explorer",
+          "process": "explorer.exe"
+        },
+        "variables": {
+          "step_0_verify_failed": "Window is still maximized",
+          "typed_text": "my name.txt",
+          "last_wait_seconds": 1.0,
+          "last_wait_reason": "Wait for file creation"
+        },
+        "cached_element": []
+      }
+    },
+    {
+      "id": "session_20260308_041418",
+      "timestamp": "2026-03-08T04:15:55.532873",
+      "success": true,
+      "failure_reason": null,
+      "duration_ms": 1656.7359999999999,
+      "intent": {
+        "action": "create",
+        "target": "file",
+        "parameters": {
+          "name": "my name",
+          "type": "file",
+          "location": "desktop"
+        },
+        "raw_command": "create a text file called my name in the desktop",
+        "confidence": 0.8
+      },
+      "plan": {
+        "strategy": "create_file_in_desktop",
+        "reasoning": "Cached plan (used 2 times, success rate: 2/2)",
+        "step_count": 3,
+        "steps": [
+          {
+            "index": 0,
+            "action": "focus_window",
+            "parameters": {
+              "query": "Desktop - File Explorer"
+            },
+            "description": "",
+            "status": "COMPLETED"
+          },
+          {
+            "index": 1,
+            "action": "type_text",
+            "parameters": {
+              "text": "my name.txt",
+              "element_query": "new file"
+            },
+            "description": "",
+            "status": "COMPLETED"
+          },
+          {
+            "index": 2,
+            "action": "wait",
+            "parameters": {
+              "seconds": 1,
+              "reason": "Wait for file creation"
+            },
+            "description": "",
+            "status": "COMPLETED"
+          }
+        ]
+      },
+      "step_results": [
+        {
+          "step_index": 0,
+          "success": true,
+          "method_used": "window_manager",
+          "error": null,
+          "data_key": [
+            "hwnd",
+            "title",
+            "process"
+          ]
+        },
+        {
+          "step_index": 1,
+          "success": true,
+          "method_used": "pyautogui",
+          "error": null,
+          "data_key": [
+            "text_length",
+            "text_preview",
+            "clear_first"
+          ]
+        },
+        {
+          "step_index": 2,
+          "success": true,
+          "method_used": "time_sleep",
+          "error": null,
+          "data_key": [
+            "requested_seconds",
+            "actual_seconds",
+            "reason"
+          ]
+        }
+      ],
+      "final_context": {
+        "current_window": {
+          "hwnd": 10552944,
+          "title": "Desktop - File Explorer",
+          "process": "explorer.exe"
+        },
+        "variables": {
+          "step_0_verify_failed": "Window is still maximized",
+          "typed_text": "my name.txt",
+          "last_wait_seconds": 1.0,
+          "last_wait_reason": "Wait for file creation"
+        },
+        "cached_element": []
+      }
+    },
+    {
+      "id": "session_20260308_041418",
+      "timestamp": "2026-03-08T04:17:45.309557",
+      "success": true,
+      "failure_reason": null,
+      "duration_ms": 3458.3740000000003,
+      "intent": {
+        "action": "navigate",
+        "target": "Brave",
+        "parameters": {
+          "url": "youtube.com",
+          "new_tab": true
+        },
+        "raw_command": "Open Brave and go to YouTube in new tab.",
+        "confidence": 0.8
+      },
+      "plan": {
+        "strategy": "navigate_in_new_tab",
+        "reasoning": "Brave is running, open a new tab and navigate to YouTube",
+        "step_count": 3,
+        "steps": [
+          {
+            "index": 0,
+            "action": "focus_window",
+            "parameters": {
+              "query": "Brave"
+            },
+            "description": "",
+            "status": "COMPLETED"
+          },
+          {
+            "index": 1,
+            "action": "hotkey",
+            "parameters": {
+              "keys": [
+                "ctrl",
+                "t"
+              ]
+            },
+            "description": "",
+            "status": "COMPLETED"
+          },
+          {
+            "index": 2,
+            "action": "navigate_url",
+            "parameters": {
+              "url": "youtube.com"
+            },
+            "description": "",
+            "status": "COMPLETED"
+          }
+        ]
+      },
+      "step_results": [
+        {
+          "step_index": 0,
+          "success": true,
+          "method_used": "window_manager",
+          "error": null,
+          "data_key": [
+            "hwnd",
+            "title",
+            "process"
+          ]
+        },
+        {
+          "step_index": 1,
+          "success": true,
+          "method_used": "pyautogui",
+          "error": null,
+          "data_key": [
+            "keys",
+            "key_count"
+          ]
+        },
+        {
+          "step_index": 2,
+          "success": true,
+          "method_used": "browser_navigation",
+          "error": null,
+          "data_key": [
+            "url",
+            "browser",
+            "new_tab",
+            "window_title"
+          ]
+        }
+      ],
+      "final_context": {
+        "current_window": {
+          "hwnd": 2165142,
+          "title": "How I Built a Real-Time Stock Data Pipeline from Scratch (with Kafka, Airflow, and Snowflake) | by DataBear | Medium - Brave",
+          "process": "brave.exe"
+        },
+        "variables": {
+          "step_0_verify_failed": "Window is still maximized",
+          "last_hotkey": [
+            "ctrl",
+            "t"
+          ],
+          "navigate_url": "https://youtube.com"
+        },
+        "cached_element": []
+      }
+    },
+    {
+      "id": "session_20260308_041418",
+      "timestamp": "2026-03-08T04:18:00.573710",
+      "success": true,
+      "failure_reason": null,
+      "duration_ms": 3453.761,
+      "intent": {
+        "action": "navigate",
+        "target": "Brave",
+        "parameters": {
+          "url": "youtube.com",
+          "new_tab": true
+        },
+        "raw_command": "Open Brave and go to YouTube in new tab.",
+        "confidence": 0.8
+      },
+      "plan": {
+        "strategy": "navigate_in_new_tab",
+        "reasoning": "Brave is already running, open a new tab and navigate to YouTube",
+        "step_count": 3,
+        "steps": [
+          {
+            "index": 0,
+            "action": "focus_window",
+            "parameters": {
+              "query": "Brave"
+            },
+            "description": "",
+            "status": "COMPLETED"
+          },
+          {
+            "index": 1,
+            "action": "hotkey",
+            "parameters": {
+              "keys": [
+                "ctrl",
+                "t"
+              ]
+            },
+            "description": "",
+            "status": "COMPLETED"
+          },
+          {
+            "index": 2,
+            "action": "navigate_url",
+            "parameters": {
+              "url": "youtube.com"
+            },
+            "description": "",
+            "status": "COMPLETED"
+          }
+        ]
+      },
+      "step_results": [
+        {
+          "step_index": 0,
+          "success": true,
+          "method_used": "window_manager",
+          "error": null,
+          "data_key": [
+            "hwnd",
+            "title",
+            "process"
+          ]
+        },
+        {
+          "step_index": 1,
+          "success": true,
+          "method_used": "pyautogui",
+          "error": null,
+          "data_key": [
+            "keys",
+            "key_count"
+          ]
+        },
+        {
+          "step_index": 2,
+          "success": true,
+          "method_used": "browser_navigation",
+          "error": null,
+          "data_key": [
+            "url",
+            "browser",
+            "new_tab",
+            "window_title"
+          ]
+        }
+      ],
+      "final_context": {
+        "current_window": {
+          "hwnd": 265434,
+          "title": "untitled-1.asm* - Sim8085 - Brave",
+          "process": "brave.exe"
+        },
+        "variables": {
+          "step_0_verify_failed": "Window is still maximized",
+          "last_hotkey": [
+            "ctrl",
+            "t"
+          ],
+          "navigate_url": "https://youtube.com"
+        },
+        "cached_element": []
+      }
+    },
+    {
+      "id": "session_20260308_041418",
+      "timestamp": "2026-03-08T04:20:33.763899",
+      "success": false,
+      "failure_reason": "Failed to launch 'chrome'.\n App may not be installed or path not found",
+      "duration_ms": 8379.698,
+      "intent": {
+        "action": "navigate",
+        "target": "youtube",
+        "parameters": {
+          "url": "youtube.com"
+        },
+        "raw_command": "open, pray and go to youtube",
+        "confidence": 0.8
+      },
+      "plan": {
+        "strategy": "navigate_to_youtube",
+        "reasoning": "User wants to navigate to YouTube, which is not running, so we need to launch it first.",
+        "step_count": 3,
+        "steps": [
+          {
+            "index": 0,
+            "action": "launch_app",
+            "parameters": {
+              "app_name": "chrome"
+            },
+            "description": "",
+            "status": "FAILED"
+          },
+          {
+            "index": 1,
+            "action": "wait",
+            "parameters": {
+              "seconds": 2,
+              "reason": "Wait for Chrome to load"
+            },
+            "description": "",
+            "status": "PENDING"
+          },
+          {
+            "index": 2,
+            "action": "navigate_url",
+            "parameters": {
+              "url": "youtube.com"
+            },
+            "description": "",
+            "status": "PENDING"
+          }
+        ]
+      },
+      "step_results": [
+        {
+          "step_index": 0,
+          "success": false,
+          "method_used": "process_manager",
+          "error": "Failed to launch 'chrome'.\n App may not be installed or path not found",
+          "data_key": []
+        }
+      ],
+      "final_context": {
+        "current_window": null,
+        "variables": {},
+        "cached_element": []
+      }
+    },
+    {
+      "id": "session_20260308_041418",
+      "timestamp": "2026-03-08T04:20:59.856123",
+      "success": true,
+      "failure_reason": null,
+      "duration_ms": 13993.489,
+      "intent": {
+        "action": "navigate",
+        "target": "youtube",
+        "parameters": {
+          "url": "youtube.com"
+        },
+        "raw_command": "open, pray and go to youtube",
+        "confidence": 0.8
+      },
+      "plan": {
+        "strategy": "navigate_to_youtube",
+        "reasoning": "User wants to navigate to YouTube, which is not running. Need to launch it.",
+        "step_count": 3,
+        "steps": [
+          {
+            "index": 0,
+            "action": "launch_app",
+            "parameters": {
+              "app_name": "chrome"
+            },
+            "description": "",
+            "status": "COMPLETED"
+          },
+          {
+            "index": 1,
+            "action": "wait",
+            "parameters": {
+              "seconds": 2,
+              "reason": "Wait for Chrome to load"
+            },
+            "description": "",
+            "status": "COMPLETED"
+          },
+          {
+            "index": 2,
+            "action": "navigate_url",
+            "parameters": {
+              "url": "youtube.com"
+            },
+            "description": "",
+            "status": "COMPLETED"
+          }
+        ]
+      },
+      "step_results": [
+        {
+          "step_index": 0,
+          "success": true,
+          "method_used": "process_manager",
+          "error": null,
+          "data_key": [
+            "app_name",
+            "pid",
+            "already_running",
+            "window_found",
+            "hwnd",
+            "title"
+          ]
+        },
+        {
+          "step_index": 1,
+          "success": true,
+          "method_used": "time_sleep",
+          "error": null,
+          "data_key": [
+            "requested_seconds",
+            "actual_seconds",
+            "reason"
+          ]
+        },
+        {
+          "step_index": 2,
+          "success": true,
+          "method_used": "browser_navigation",
+          "error": null,
+          "data_key": [
+            "url",
+            "browser",
+            "new_tab",
+            "window_title"
+          ]
+        }
+      ],
+      "final_context": {
+        "current_window": {
+          "hwnd": 265434,
+          "title": "untitled-1.asm* - Sim8085 - Brave",
+          "process": "brave.exe"
+        },
+        "variables": {
+          "launched_app": "chrome",
+          "launched_pid": 1876,
+          "step_0_verify_failed": "No process or window found for 'chrome'",
+          "last_wait_seconds": 2.0,
+          "last_wait_reason": "Wait for Chrome to load",
+          "navigate_url": "https://youtube.com"
+        },
+        "cached_element": []
+      }
+    }
+  ],
+  "metadata": {
+    "version": "1.0",
+    "created_at": "2026-03-08T04:14:18.760509",
+    "last_updated": "2026-03-08T04:20:59.856123",
+    "total_executions": 7,
+    "total_success": 0,
+    "total_failures": 1,
+    "total_successes": 6
+  }
+}

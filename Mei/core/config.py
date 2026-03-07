@@ -17,7 +17,7 @@ class AudioConfig:
     model_path: str = r'models/whisper-model'
     device: str = "cuda"
     sample_rate: int = 16000
-    energy_threshold: int = 0.02
+    energy_threshold: int = 0.003
     wake_word: str = "mei"
     #listen_timeout: int = 1 
     phrase_timeout: int = 10

@@ -12,10 +12,12 @@ TERMINAL_KEYWORDS = ['cmd', 'powershell', 'terminal', 'bash', 'wsl', 'console']
 
 class AppLibrary:
     def __init__(self, cache_file="known_apps.csv"):
-        os.makedirs(os.path.dirname(cache_file), exist_ok=True)
         self.cache_file = cache_file
+        dir_name = os.path.dirname(self.cache_file)
+        if dir_name:
+            os.makedirs(dir_name, exist_ok=True)
         self.apps = {}
-        self._load_cache_only()
+        self.load_cache()
 
     def _load_cache_only(self):
         if not os.path.exists(self.cache_file):

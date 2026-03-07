@@ -1,0 +1,245 @@
+{
+  "executions": [
+    {
+      "id": "session_20260308_035944",
+      "timestamp": "2026-03-08T04:01:31.246951",
+      "success": true,
+      "failure_reason": null,
+      "duration_ms": 3488.348,
+      "intent": {
+        "action": "navigate",
+        "target": "brave",
+        "parameters": {
+          "url": "youtube.com",
+          "new_tab": true
+        },
+        "raw_command": "Open brave and go to youtube in new tab",
+        "confidence": 0.8
+      },
+      "plan": {
+        "strategy": "navigate_in_existing_browser",
+        "reasoning": "Brave is already running, use existing browser to navigate to new tab",
+        "step_count": 3,
+        "steps": [
+          {
+            "index": 0,
+            "action": "focus_window",
+            "parameters": {
+              "query": "Brave"
+            },
+            "description": "",
+            "status": "COMPLETED"
+          },
+          {
+            "index": 1,
+            "action": "hotkey",
+            "parameters": {
+              "keys": [
+                "ctrl",
+                "t"
+              ]
+            },
+            "description": "",
+            "status": "COMPLETED"
+          },
+          {
+            "index": 2,
+            "action": "navigate_url",
+            "parameters": {
+              "url": "youtube.com"
+            },
+            "description": "",
+            "status": "COMPLETED"
+          }
+        ]
+      },
+      "step_results": [
+        {
+          "step_index": 0,
+          "success": true,
+          "method_used": "window_manager",
+          "error": null,
+          "data_key": [
+            "hwnd",
+            "title",
+            "process"
+          ]
+        },
+        {
+          "step_index": 1,
+          "success": true,
+          "method_used": "pyautogui",
+          "error": null,
+          "data_key": [
+            "keys",
+            "key_count"
+          ]
+        },
+        {
+          "step_index": 2,
+          "success": true,
+          "method_used": "browser_navigation",
+          "error": null,
+          "data_key": [
+            "url",
+            "browser",
+            "new_tab",
+            "window_title"
+          ]
+        }
+      ],
+      "final_context": {
+        "current_window": {
+          "hwnd": 2165142,
+          "title": "How I Built a Real-Time Stock Data Pipeline from Scratch (with Kafka, Airflow, and Snowflake) | by DataBear | Medium - Brave",
+          "process": "brave.exe"
+        },
+        "variables": {
+          "step_0_verify_failed": "Window is still maximized",
+          "last_hotkey": [
+            "ctrl",
+            "t"
+          ],
+          "navigate_url": "https://youtube.com"
+        },
+        "cached_element": []
+      }
+    },
+    {
+      "id": "session_20260308_035944",
+      "timestamp": "2026-03-08T04:02:15.171567",
+      "success": true,
+      "failure_reason": null,
+      "duration_ms": 15318.429,
+      "intent": {
+        "action": "create",
+        "target": "folder",
+        "parameters": {
+          "name": "Name",
+          "type": "folder",
+          "location": "Desktop"
+        },
+        "raw_command": "create folder 'Name' in Desktop",
+        "confidence": 0.8
+      },
+      "plan": {
+        "strategy": "create_folder_in_desktop",
+        "reasoning": "User wants to create a folder named 'Name' in the Desktop, which is not a running application and not a current window",
+        "step_count": 4,
+        "steps": [
+          {
+            "index": 0,
+            "action": "launch_app",
+            "parameters": {
+              "app_name": "explorer"
+            },
+            "description": "",
+            "status": "COMPLETED"
+          },
+          {
+            "index": 1,
+            "action": "wait",
+            "parameters": {
+              "seconds": 2,
+              "reason": "Wait for File Explorer to load"
+            },
+            "description": "",
+            "status": "COMPLETED"
+          },
+          {
+            "index": 2,
+            "action": "type_text",
+            "parameters": {
+              "text": "Name",
+              "element_query": "input for folder name"
+            },
+            "description": "",
+            "status": "COMPLETED"
+          },
+          {
+            "index": 3,
+            "action": "hotkey",
+            "parameters": {
+              "keys": [
+                "enter"
+              ]
+            },
+            "description": "",
+            "status": "COMPLETED"
+          }
+        ]
+      },
+      "step_results": [
+        {
+          "step_index": 0,
+          "success": true,
+          "method_used": "process_manager",
+          "error": null,
+          "data_key": [
+            "app_name",
+            "pid",
+            "already_running",
+            "window_found",
+            "hwnd",
+            "title"
+          ]
+        },
+        {
+          "step_index": 1,
+          "success": true,
+          "method_used": "time_sleep",
+          "error": null,
+          "data_key": [
+            "requested_seconds",
+            "actual_seconds",
+            "reason"
+          ]
+        },
+        {
+          "step_index": 2,
+          "success": true,
+          "method_used": "pyautogui",
+          "error": null,
+          "data_key": [
+            "text_length",
+            "text_preview",
+            "clear_first"
+          ]
+        },
+        {
+          "step_index": 3,
+          "success": true,
+          "method_used": "pyautogui",
+          "error": null,
+          "data_key": [
+            "keys",
+            "key_count"
+          ]
+        }
+      ],
+      "final_context": {
+        "current_window": null,
+        "variables": {
+          "launched_app": "explorer",
+          "launched_pid": 11712,
+          "last_wait_seconds": 2.0,
+          "last_wait_reason": "Wait for File Explorer to load",
+          "typed_text": "Name",
+          "last_hotkey": [
+            "enter"
+          ]
+        },
+        "cached_element": []
+      }
+    }
+  ],
+  "metadata": {
+    "version": "1.0",
+    "created_at": "2026-03-08T03:59:44.933109",
+    "last_updated": "2026-03-08T04:02:15.171567",
+    "total_executions": 2,
+    "total_success": 0,
+    "total_failures": 0,
+    "total_successes": 2
+  }
+}

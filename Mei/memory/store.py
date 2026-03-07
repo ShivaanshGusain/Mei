@@ -2,16 +2,15 @@ import sqlite3
 import json
 import hashlib
 import threading
-from typing import Dict, Any, Optional, List, Tuple, Union
+from typing import Dict, Any, Optional, List, Tuple
 from datetime import datetime
 from pathlib import Path
 from contextlib import contextmanager
 
-from ..core.config import get_config, MemoryConfig
+from ..core.config import get_config
 from ..core.events import emit,EventType
-
+from .schema import SCHEMA_SQL, INDEXES_SQL,SCHEMA_VERSION, get_cleanup_sql, get_table_names,MigrationManager,CLEANUP_CONFIG,TABLE_NAMES
 DEFAULT_DB_PATH = 'data/memory.db'
-schema_version = 1
 
 MAX_TASK_HISTORY = 10000
 MAX_PLAN_CACHE = 1000
@@ -22,359 +21,6 @@ DEFAULT_MIN_SUCCESS_RATE = 0.7
 DEFAULT_MIN_USES = 2
 DEFAULT_MIN_CONFIDENCE = 0.5
 
-SCHEMA_SQL = """
-
-Create table if not Exists schema_info (
-key TEXT PRIMARY KEY,
-value TEXT NOT NULL 
-);
-
-
-
-CREATE TABLE IF NOT EXISTS entities (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    entity_type TEXT NOT NULL,
-    resolution TEXT NOT NULL,
-    keywords TEXT,
-    source_app TEXT,
-    source_context TEXT,
-    created_at TEXT NOT NULL,
-    last_used_at TEXT,
-    use_count INTEGER DEFAULT 0,
-    confidence REAL DEFAULT 1.0,
-    active INTEGER DEFAULT 1
-);
-
-CREATE TABLE IF NOT EXISTS entity_aliases (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    entity_id TEXT NOT NULL,
-    alias TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    FOREIGN KEY (entity_id) REFERENCES entities(id),
-    UNIQUE(alias)
-);
-
-CREATE TABLE IF NOT EXISTS shortcuts (
-    id TEXT PRIMARY KEY,
-    trigger_phrase TEXT NOT NULL UNIQUE,
-    action_type TEXT NOT NULL,
-    action_data TEXT NOT NULL,
-    description TEXT,
-    created_at TEXT NOT NULL,
-    last_used_at TEXT,
-    use_count INTEGER DEFAULT 0,
-    active INTEGER DEFAULT 1
-);
-
-
-CREATE TABLE IF NOT EXISTS macros (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL UNIQUE,
-    description TEXT,
-    steps TEXT NOT NULL,
-    trigger_phrases TEXT,
-    created_at TEXT NOT NULL,
-    last_used_at TEXT,
-    use_count INTEGER DEFAULT 0,
-    success_count INTEGER DEFAULT 0,
-    failure_count INTEGER DEFAULT 0,
-    active INTEGER DEFAULT 1
-);
-
-CREATE TABLE IF NOT EXISTS macro_executions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    macro_id TEXT NOT NULL,
-    started_at TEXT NOT NULL,
-    completed_at TEXT,
-    success INTEGER,
-    steps_completed INTEGER,
-    failure_reason TEXT,
-    context TEXT,
-    FOREIGN KEY (macro_id) REFERENCES macros(id)
-);
-
-Create table if not exists task_executions(
-id INTEGER PRIMARY KEY AUTOINCREMENT,
-execution_id TEXT UNIQUE NOT NULL,
-timestamp TEXT NOT NULL,
-session_id TEXT NOT NULL,
-duration_ms REAL,
-
-raw_command TEXT NOT NULL,
-intent_action TEXT NOT NULL,
-intent_target TEXT,
-intent_parameters TEXT,
-intent_confidence REAL,
-
-plan_strategy TEXT,
-plan_reasoning TEXT,
-plan_steps_json TEXT,
-plan_step_count INTEGER,
-plan_hash TEXT,
-
-success INTEGER NOT NULL,
-failure_reason TEXT,
-failure_step_index INTEGER,
-
-context_json TEXT
-);
-
-Create table if not exists step_executions (
-id INTEGER PRIMARY KEY AUTOINCREMENT, 
-execution_id        TEXT NOT NULL,
-step_index          INTEGER NOT NULL,
-action              TEXT NOT NULL,
-parameters_json     TEXT,
-description         TEXT,
-
-success             INTEGER NOT NULL,
-error               TEXT,
-method_used         TEXT,
-duration_ms         REAL,
-
-verified            INTEGER,
-verify_confidence   REAL,
-
-result_data_json    TEXT,
-FOREIGN KEY (execution_id) REFERENCES task_executions(execution_id)
-);
-
-Create table if not exists plan_cache(
-id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-intent_pattern      TEXT UNIQUE NOT NULL,
-intent_action       TEXT NOT NULL,
-intent_target       TEXT,
-raw_command  TEXT,
-
-plan_strategy       TEXT NOT NULL,
-plan_steps_json     TEXT NOT NULL,
-plan_hash           TEXT NOT NULL,
-
-use_count           INTEGER DEFAULT 1,
-success_count       INTEGER DEFAULT 1,
-failure_count       INTEGER DEFAULT 0,
-
-created_at          TEXT DEFAULT CURRENT_TIMESTAMP,                   
-last_used_at        TEXT DEFAULT CURRENT_TIMESTAMP,
-last_success_at     TEXT,
-
-is_valid            INTEGER DEFAULT 1,
-invalidation_reason TEXT
-);
-
-Create table if not exists command_patterns(
-
-id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-                                                    
-raw_pattern         TEXT UNIQUE NOT NULL,           
-normalized_pattern  TEXT,                           
-intent_action       TEXT NOT NULL,                  
-intent_target       TEXT,                           
-                                                    
-occurrence_count    INTEGER DEFAULT 1,              
-first_occurrence    TEXT DEFAULT CURRENT_TIMESTAMP, 
-last_occurrence     TEXT DEFAULT CURRENT_TIMESTAMP, 
-                                                    
-morning_count       INTEGER DEFAULT 0,              
-afternoon_count     INTEGER DEFAULT 0,              
-evening_count       INTEGER DEFAULT 0,              
-night_count         INTEGER DEFAULT 0,              
-                                                    
-weekday_count       INTEGER DEFAULT 0,              
-weekend_count       INTEGER DEFAULT 0,              
-                                                    
-success_count       INTEGER DEFAULT 0,              
-failure_count       INTEGER DEFAULT 0               
-);
-
-Create table if not exists element_cache(
-
-id                  INTEGER PRIMARY KEY AUTOINCREMENT,        
-                                                              
-element_query       TEXT NOT NULL,                            
-app_name            TEXT NOT NULL,                            
-window_pattern      TEXT,                                     
-                                                              
-bounding_box_x      INTEGER,                                  
-bounding_box_y      INTEGER,                                  
-bounding_box_w      INTEGER,                                  
-bounding_box_h      INTEGER,                                  
-center_x            INTEGER,                                  
-center_y            INTEGER,                                  
-                                                              
-source              TEXT,                                     
-element_type        TEXT,                                     
-automation_id       TEXT,                                     
-element_name        TEXT,                                     
-                                                              
-hit_count           INTEGER DEFAULT 1,                        
-miss_count          INTEGER DEFAULT 0,                        
-last_hit            TEXT DEFAULT CURRENT_TIMESTAMP,           
-last_miss           TEXT,                                     
-                                                              
-is_valid            INTEGER DEFAULT 1,                        
-confidence          REAL DEFAULT 1.0,                         
-                                                              
-UNIQUE(element_query, app_name, window_pattern)               
-
-);
-
-Create table if not exists settings(
-key TEXT PRIMARY KEY,
-value TEXT,
-updated_at TEXT
-);
-
-Create table if not exists conversation_history(
-id INTEGER PRIMARY KEY,
-role TEXT,
-content TEXT,
-timestamp TEXT,
-session_id TEXT
-);
-
-Create table if not exists command_instances(
-id INTEGER PRIMARY KEY AUTOINCREMENT,
-pattern_id INTEGER NOT NULL,
-raw_text TEXT NOT NULL,
-raw_text_normalized TEXT NOT NULL,
-raw_text_hash TEXT NOT NULL,
-variable_bindings TEXT,
-success_count INTEGER DEFAULT 0,
-failure_count INTEGER DEFAULT 0,
-context_app TEXT,
-created_at TEXT NOT NULL,
-last_used_at TEXT
-);
-
-
-Create table if not exists method_statistics(
-id                  INTEGER PRIMARY KEY AUTOINCREMENT,                
-                                                                      
-action              TEXT NOT NULL,                                    
-app_name            TEXT,                                             
-method_used         TEXT NOT NULL,                                    
-                                                                      
-success_count       INTEGER DEFAULT 0,                                
-failure_count       INTEGER DEFAULT 0,                                
-                                                                      
-avg_duration_ms     REAL,                                             
-min_duration_ms     REAL,                                             
-max_duration_ms     REAL,                                             
-total_duration_ms   REAL DEFAULT 0,                                   
-                                                                      
-avg_cpu_percent     REAL,                                             
-avg_memory_mb       REAL,                                             
-                                                                      
-first_used          TEXT DEFAULT CURRENT_TIMESTAMP,                   
-last_used           TEXT DEFAULT CURRENT_TIMESTAMP,                   
-                                                                      
-UNIQUE(action, app_name, method_used)                                 
-
-);
-
-Create table if not exists user_preferences(
-id                  INTEGER PRIMARY KEY AUTOINCREMENT,                
-                                                                      
--- Identification                                                     
-preference_key      TEXT UNIQUE NOT NULL,                             
-category            TEXT NOT NULL,                                    
-                                                                      
--- Value                                                              
-preference_value    TEXT NOT NULL,                                    
-value_type          TEXT DEFAULT 'string',                            
-                                                                      
--- Learning                                                           
-confidence          REAL DEFAULT 0.5,                                 
-evidence_count      INTEGER DEFAULT 1,                                
-                                                                      
--- Timestamps                                                         
-learned_at          TEXT DEFAULT CURRENT_TIMESTAMP,                   
-last_confirmed      TEXT DEFAULT CURRENT_TIMESTAMP,                   
-                                                                      
--- Override                                                           
-is_explicit         INTEGER DEFAULT 0                                 
-
-);
-
-Create table if not exists error_recovery(
-
-id                  INTEGER PRIMARY KEY AUTOINCREMENT,         
-                                                               
-failed_action       TEXT NOT NULL,                             
-failed_method       TEXT,                                      
-error_pattern       TEXT NOT NULL,                             
-app_name            TEXT,                                      
-                                                               
-recovery_action     TEXT NOT NULL,                             
-recovery_params_json TEXT,                                     
-recovery_description TEXT,                                     
-                                                               
-attempt_count       INTEGER DEFAULT 1,                         
-success_count       INTEGER DEFAULT 1,                         
-                                                               
-first_learned       TEXT DEFAULT CURRENT_TIMESTAMP,            
-last_used           TEXT DEFAULT CURRENT_TIMESTAMP,            
-                                                               
-UNIQUE(failed_action, error_pattern, app_name)                 
-
-);
-"""
-
-INDEXES_SQL = """
-CREATE INDEX IF NOT EXISTS idx_task_timestamp         
-    ON task_executions(timestamp DESC);               
-CREATE INDEX IF NOT EXISTS idx_task_intent            
-    ON task_executions(intent_action, intent_target); 
-CREATE INDEX IF NOT EXISTS idx_task_success           
-    ON task_executions(success);                      
-CREATE INDEX IF NOT EXISTS idx_task_session           
-    ON task_executions(session_id);                   
-CREATE INDEX IF NOT EXISTS idx_task_raw_command       
-    ON task_executions(raw_command);                  
-CREATE INDEX IF NOT EXISTS idx_task_plan_hash         
-    ON task_executions(plan_hash);                    
-                                                      
-CREATE INDEX IF NOT EXISTS idx_step_execution         
-    ON step_executions(execution_id);                 
-CREATE INDEX IF NOT EXISTS idx_step_action            
-    ON step_executions(action);                       
-CREATE INDEX IF NOT EXISTS idx_step_method            
-    ON step_executions(method_used);                  
-                                                      
-CREATE INDEX IF NOT EXISTS idx_plan_pattern           
-    ON plan_cache(intent_pattern);                    
-CREATE INDEX IF NOT EXISTS idx_plan_action_target     
-    ON plan_cache(intent_action, intent_target);      
-CREATE INDEX IF NOT EXISTS idx_plan_hash              
-    ON plan_cache(plan_hash);                         
-CREATE INDEX IF NOT EXISTS idx_plan_valid             
-    ON plan_cache(is_valid);                          
-                                                      
-CREATE INDEX IF NOT EXISTS idx_cmd_pattern            
-    ON command_patterns(raw_pattern);                 
-CREATE INDEX IF NOT EXISTS idx_cmd_action_target      
-    ON command_patterns(intent_action, intent_target);
-CREATE INDEX IF NOT EXISTS idx_cmd_frequency          
-    ON command_patterns(occurrence_count DESC);       
-                                                      
-CREATE INDEX IF NOT EXISTS idx_elem_query_app         
-    ON element_cache(element_query, app_name);        
-CREATE INDEX IF NOT EXISTS idx_elem_valid             
-    ON element_cache(is_valid, confidence DESC);      
-                                                      
-CREATE INDEX IF NOT EXISTS idx_method_action_app      
-    ON method_statistics(action, app_name);           
-                                                      
-CREATE INDEX IF NOT EXISTS idx_pref_category          
-    ON user_preferences(category);                    
-                                                      
-CREATE INDEX IF NOT EXISTS idx_error_action           
-    ON error_recovery(failed_action, app_name);       
-                                                      
-
-"""
 
 
 class MemoryStore:
@@ -402,6 +48,8 @@ class MemoryStore:
                 check_same_thread= False
             )
 
+            self._local.connection.execute("PRAGMA journal_mode=WAL")
+            self._local.connection.execute("PRAGMA busy_timeout=30000")
             self._local.connection.execute("PRAGMA foreign_keys = ON")
             self._local.connection.row_factory = sqlite3.Row
 
@@ -426,18 +74,43 @@ class MemoryStore:
     def _init_database(self)->None:
         with self.transaction() as conn:
             cursor = conn.cursor()
+
+            current_version = 0
+            try:
+                cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_info'")
+                if cursor.fetchone():
+                    cursor.execute("SELECT value FROM schema_info WHERE key = 'version'")
+                    row = cursor.fetchone()
+                    if row:
+                        current_version = int(row['value'])
+
+            except Exception:
+                current_version = 0
+
+            if current_version == SCHEMA_VERSION:
+                return
+            
+            if current_version > 0 and current_version < SCHEMA_VERSION:
+                migrator = MigrationManager()
+                migration_sql = migrator.get_migration_sql(current_version, SCHEMA_VERSION)
+                for statement in migration_sql:
+                    cursor.execute(statement)
+                conn.commit()
+                
             cursor.executescript(SCHEMA_SQL)
 
             cursor.executescript(INDEXES_SQL)
 
             cursor.execute('''
-                           INSERT OR REPLACE INTO schema_info (key,value)
-                           VALUES ('version',?) ''', (str(schema_version),))
+                        INSERT OR REPLACE INTO schema_info (key,value)
+                        VALUES ('version',?) ''', (str(SCHEMA_VERSION),))
             
             cursor.execute('''
-                           INSERT OR IGNORE INTO schema_info (key, value)
-                           VALUES ('created_at', ?)
-                           ''', (datetime.now().isoformat(),))
+                        INSERT OR IGNORE INTO schema_info (key, value)
+                        VALUES ('created_at', ?)
+                        ''', (datetime.now().isoformat(),))
+            conn.commit()
+
 
     def get_schema_version(self)->int:
         conn = self._get_connection()
@@ -462,6 +135,23 @@ class MemoryStore:
         return datetime.now().isoformat()
     
     @staticmethod
+    def _normalize_text(text: str)->str:
+        import re
+        result = text.lower().strip()
+        fillers = [
+            r'\bplease\b', r'\bcan you\b', r'\bcould you\b',
+            r'\bhey\b', r'\bjust\b', r'\bgo ahead and\b',
+            r'\bi want to\b', r'\bi need to\b', r'\bi\'d like to\b',
+        ]
+        for filler in fillers:
+            result = re.sub(filler,  '', result, flags = re.IGNORECASE)
+        result = re.sub(r'[.,!?:;]', '', result)
+
+        result = re.sub(r'\s+', ' ', result).strip()
+        return result if result else text.lower().strip()
+    
+    
+    @staticmethod
     def _row_to_dict(row:sqlite3.Row)->Dict[str,Any]:
         result = dict(row)
         json_fields = ['intent_parameters','plan_steps_json','context_json','parameters_json','result_data_json','recovery_params_json']
@@ -474,6 +164,20 @@ class MemoryStore:
                     pass
         return result
     
+    def enforce_limits(self)-> int:
+        total_deleted = 0
+        with self.transaction() as conn:
+            cursor = conn.cursor()
+            for table_name, (max_rows, order_col) in CLEANUP_CONFIG.items():
+                cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
+                count = cursor.fetchone()[0]
+                if count > max_rows:
+                    sql = get_cleanup_sql(table_name, max_rows, order_col)
+                    cursor.execute(sql)
+                    deleted = cursor.rowcount
+                    total_deleted += deleted
+        return total_deleted
+
     def save_task_execution(
             self,
             execution_id:str,
@@ -494,35 +198,35 @@ class MemoryStore:
             cursor = conn.cursor()
 
             cursor.execute('''
-                           Insert OR REPLACE into task_executions (
-                           execution_id, timestamp, session_id, duration_ms,
-                           raw_command, intent_action, intent_target,
-                           intent_parameters, intent_confidence,
-                           plan_strategy, plan_reasoning, plan_steps_json,
-                           plan_step_count, plan_hash,
-                           success, failure_reason, failure_step_index,
-                           context_json
-                           ) Values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-                           ''', (
-                               execution_id,
-                               self._now(),
-                               session_id,
-                               duration_ms,
-                               raw_command,
-                               intent.get('action'),
-                               intent.get('target'),
-                               json.dumps(intent.get('parameters',{})),
-                               intent.get('confidence'),
-                               plan.get('strategy'),
-                               plan.get('reasoning'),
-                               json.dumps(plan.get('steps',[])),
-                               len(plan.get('steps',[])),
-                               plan_hash,
-                               1 if success else 0,
-                               failure_reason,
-                               failure_step_index,
-                               json.dumps(context) if context else None
-                           ))
+                        Insert OR REPLACE into task_executions (
+                        execution_id, timestamp, session_id, duration_ms,
+                        raw_command, intent_action, intent_target,
+                        intent_parameters, intent_confidence,
+                        plan_strategy, plan_reasoning, plan_steps_json,
+                        plan_step_count, plan_hash,
+                        success, failure_reason, failure_step_index,
+                        context_json
+                        ) Values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                        ''', (
+                            execution_id,
+                            self._now(),
+                            session_id,
+                            duration_ms,
+                            raw_command,
+                            intent.get('action'),
+                            intent.get('target'),
+                            json.dumps(intent.get('parameters',{})),
+                            intent.get('confidence'),
+                            plan.get('strategy'),
+                            plan.get('reasoning'),
+                            json.dumps(plan.get('steps',[])),
+                            len(plan.get('steps',[])),
+                            plan_hash,
+                            1 if success else 0,
+                            failure_reason,
+                            failure_step_index,
+                            json.dumps(context) if context else None
+                        ))
             
             task_id = cursor.lastrowid
 
@@ -539,25 +243,25 @@ class MemoryStore:
     def _save_step_execution(self,cursor: sqlite3.Cursor, execution_id:str, step_result:Dict[str,Any])->None:
 
         cursor.execute('''
-                       Insert Into step_executions (
-                       execution_id, step_index, action, parameters_json,
-                       description, success, error, method_used, duration_ms,
-                       verified, verify_confidence, result_data_json)
-                       Values (?,?,?,?,?,?,?,?,?,?,?,?)
-                       ''', (
-                           execution_id,
-                           step_result.get('step_index',0),
-                           step_result.get('action'),
-                           json.dumps(step_result.get('parameters',{})),
-                           step_result.get('description'),
-                           1 if step_result.get('success') else 0,
-                           step_result.get('error'),
-                           step_result.get('method_used'),
-                           step_result.get('duration_ms'),
-                           1 if step_result.get('verified') else 0,
-                           step_result.get('verify_confidence'),
-                           json.dumps(step_result.get('data',{}))
-                       ))
+                    Insert Into step_executions (
+                    execution_id, step_index, action, parameters_json,
+                    description, success, error, method_used, duration_ms,
+                    verified, verify_confidence, result_data_json)
+                    Values (?,?,?,?,?,?,?,?,?,?,?,?)
+                    ''', (
+                        execution_id,
+                        step_result.get('step_index',0),
+                        step_result.get('action'),
+                        json.dumps(step_result.get('parameters',{})),
+                        step_result.get('description'),
+                        1 if step_result.get('success') else 0,
+                        step_result.get('error'),
+                        step_result.get('method_used'),
+                        step_result.get('duration_ms'),
+                        1 if step_result.get('verified') else 0,
+                        step_result.get('verify_confidence'),
+                        json.dumps(step_result.get('data',{}))
+                    ))
         
     def get_task_executions(
             self,
@@ -608,20 +312,20 @@ class MemoryStore:
         conn = self._get_connection()
         cursor = conn.cursor()
         cursor.execute('''
-                       Select * From step_executions
-                       Where execution_id = ?
-                       Order by step_index'''
-                       , (execution_id,))
+                    Select * From step_executions
+                    Where execution_id = ?
+                    Order by step_index'''
+                    , (execution_id,))
         return [self._row_to_dict(row) for row in cursor.fetchall()]
     
     def search_task_executions( self, raw_command_like:str, limit:int = 20)->List[Dict[str,Any]]:
         conn = self._get_connection()
         cursor = conn.cursor()
         cursor.execute('''
-                       Select * from task_executions
-                       Where raw_command Like ?
-                       Order by timestamp Desc Limit ? ''',
-                       (f"%{raw_command_like}%", limit))
+                    Select * from task_executions
+                    Where raw_command Like ?
+                    Order by timestamp Desc Limit ? ''',
+                    (f"%{raw_command_like}%", limit))
         
         return [self._row_to_dict(row) for row in cursor.fetchall()]
     
@@ -638,32 +342,32 @@ class MemoryStore:
         if not plan_hash:
             step_str = json.dumps(plan_steps, sort_keys=True)
             plan_hash = hashlib.md5(step_str.encode()).hexdigest()
-       
+    
         plan_steps_json = json.dumps(plan_steps)
 
         with self.transaction() as conn:
             cursor = conn.cursor()
 
             cursor.execute('''
-                           Insert Into plan_cache (
-                           intent_pattern, intent_action, intent_target,
-                           raw_command, plan_strategy,
-                           plan_steps_json, plan_hash
-                           ) Values (?, ?, ?, ?, ?, ?, ?)
-                           On CONFLICT(intent_pattern) Do Update set
-                           use_count = use_count + 1,
-                           success_count = success_count +1,
-                           last_used_at = CURRENT_TIMESTAMP,
-                           plan_strategy = excluded.plan_strategy,
-                           plan_steps_json = excluded.plan_steps_json,
-                           plan_hash = excluded.plan_hash,
-                           is_valid = 1
-                           ''', (
-                               intent_pattern, intent_action, intent_target,
-                               raw_command, plan_strategy,
-                               plan_steps_json, plan_hash
+                        Insert Into plan_cache (
+                        intent_pattern, intent_action, intent_target,
+                        raw_command, plan_strategy,
+                        plan_steps_json, plan_hash
+                        ) Values (?, ?, ?, ?, ?, ?, ?)
+                        On CONFLICT(intent_pattern) Do Update set
+                        use_count = use_count + 1,
+                        success_count = success_count +1,
+                        last_used_at = CURRENT_TIMESTAMP,
+                        plan_strategy = excluded.plan_strategy,
+                        plan_steps_json = excluded.plan_steps_json,
+                        plan_hash = excluded.plan_hash,
+                        is_valid = 1
+                        ''', (
+                            intent_pattern, intent_action, intent_target,
+                            raw_command, plan_strategy,
+                            plan_steps_json, plan_hash
 
-                           ))
+                        ))
             return cursor.lastrowid
             
     def get_cached_plan(
@@ -711,27 +415,26 @@ class MemoryStore:
 
         if intent_target:
             cursor.execute('''
-                           Select *,
-                           COALESCE(CAST(success_count AS REAL) / NULLIF(CAST(success_count + failure_count AS REAL), 0), 0.0 ) AS success_rate
-                           FROM plan_cache
-                           WHERE intent_action = ?
-                           AND intent_target = ?
-                           AND is_valid = 1
-                           HAVING success_rate >=?
-                           ORDER BY use_count DESC
-                           ''', (intent_action, intent_target, min_success_rate))
+                        SELECT *,
+                        COALESCE(CAST(success_count AS REAL) / NULLIF(CAST(success_count + failure_count AS REAL), 0), 0.0) AS success_rate
+                        FROM plan_cache
+                        WHERE intent_action = ?
+                        AND intent_target = ?
+                        AND is_valid = 1
+                        AND COALESCE(CAST(success_count AS REAL) / NULLIF(CAST(success_count + failure_count AS REAL), 0), 0.0) >= ?
+                        ORDER BY use_count DESC
+                        ''', (intent_action, intent_target, min_success_rate))
         
         else:
             cursor.execute('''
-                           Select *,
-                           CAST(success_count AS REAL) /
-                           CAST(success_count + failure_count AS REAL) AS success_rate
-                           FROM plan_cache
-                           WHERE intent_action = ?
-                           AND is_valid = 1
-                           HAVING success_rate >= ?
-                           ORDER BY use_count DESC
-                           ''', (intent_action, min_success_rate))
+                        SELECT *,
+                        COALESCE(CAST(success_count AS REAL) / NULLIF(CAST(success_count + failure_count AS REAL), 0), 0.0) AS success_rate
+                        FROM plan_cache
+                        WHERE intent_action = ?
+                        AND is_valid = 1
+                        AND COALESCE(CAST(success_count AS REAL) / NULLIF(CAST(success_count + failure_count AS REAL), 0), 0.0) >= ?
+                        ORDER BY use_count DESC
+                        ''', (intent_action, min_success_rate))
         
         return [self._row_to_dict(row) for row in cursor.fetchall()]
     
@@ -745,19 +448,19 @@ class MemoryStore:
 
             cursor.execute('''
                         Update plan_cache SET failure_count = failure_count +1,
-                           use_count = use_count +1,
-                           last_used_at = CURRENT_TIMESTAMP
-                           WHERE intent_pattern = ?''',(intent_pattern,))
+                        use_count = use_count +1,
+                        last_used_at = CURRENT_TIMESTAMP
+                        WHERE intent_pattern = ?''',(intent_pattern,))
             
             cursor.execute('''
-                           Update plan_cache SET
-                           is_valid = 0,
-                           invalidation_reason = 'Success rate below threshold'
-                           WHERE intent_pattern = ?
-                           AND use_count >=5
-                           AND CAST(success_count AS REAL) /
-                           CAST(success_count + failure_count as REAL)<?
-                           ''', (intent_pattern, invalidate_threshold))
+                        Update plan_cache SET
+                        is_valid = 0,
+                        invalidation_reason = 'Success rate below threshold'
+                        WHERE intent_pattern = ?
+                        AND use_count >=5
+                        AND CAST(success_count AS REAL) /
+                        CAST(success_count + failure_count as REAL)<?
+                        ''', (intent_pattern, invalidate_threshold))
             
     def invalidate_plan(self,
                         intent_pattern:str,
@@ -765,10 +468,10 @@ class MemoryStore:
         with self.transaction() as conn:
             cursor = conn.cursor()
             cursor.execute('''
-                           UPDATE plan_cache SET is_valid = 0,
-                           invalidation_reason = ?
-                           WHERE intent_pattern = ?
-                           ''',(reason, intent_pattern))
+                        UPDATE plan_cache SET is_valid = 0,
+                        invalidation_reason = ?
+                        WHERE intent_pattern = ?
+                        ''',(reason, intent_pattern))
             return cursor.rowcount >0
         
     
@@ -799,22 +502,25 @@ class MemoryStore:
 
         success_col = 'success_count' if success else 'failure_count'
 
+        pattern_text = normalized_pattern or raw_command
+        pattern_hash = self._generate_hash(pattern_text)
+
         with self.transaction() as conn:
             cursor = conn.cursor()
-
             cursor.execute(f'''
-                           INSERT INTO command_patterns( 
-                           raw_pattern, normalized_pattern,
-                           intent_action, intent_target,
-                           occurrence_count, {time_col},{day_col},{success_col})
-                           VALUES (?, ?, ?, ?, 1, 1, 1, 1)
-                           ON CONFLICT(raw_pattern) DO UPDATE SET 
-                           occurrence_count = occurrence_count +1,
-                           {time_col} = {time_col} + 1,
-                           {day_col} = {day_col} + 1,
-                           {success_col} = {success_col} + 1,
-                           last_occurrence = CURRENT_TIMESTAMP
-                           ''', (raw_command, normalized_pattern, intent_action, intent_target))
+                        INSERT INTO command_patterns( 
+                        pattern, pattern_hash, action_category,
+                        intent_action, intent_target,
+                        occurrence_count, {time_col},{day_col},{success_col})
+                        VALUES (?, ?, ?, ?, ?, 1, 1, 1, 1)
+                        ON CONFLICT(pattern) DO UPDATE SET 
+                        occurrence_count = occurrence_count +1,
+                        {time_col} = {time_col} + 1,
+                        {day_col} = {day_col} + 1,
+                        {success_col} = {success_col} + 1,
+                        last_used_at = CURRENT_TIMESTAMP
+                        ''', (pattern_text, pattern_hash, intent_action,
+                              intent_action, intent_target))
             
     def get_frequent_commands(
             self,
@@ -854,10 +560,12 @@ class MemoryStore:
         raw_pattern: str                                            
     ) -> Optional[Dict[str, Any]]:                                  
         conn = self._get_connection()                               
-        cursor = conn.cursor()                                      
+        cursor = conn.cursor()       
+        pattern_hash = self._generate_hash(raw_pattern)
+                    
         cursor.execute(                                             
-            "SELECT * FROM command_patterns WHERE raw_pattern = ?", 
-            (raw_pattern,)                                          
+            "SELECT * FROM command_patterns WHERE pattern_hash = ?", 
+            (pattern_hash,)                                          
         )                                                           
         row = cursor.fetchone()                                     
         return self._row_to_dict(row) if row else None              
@@ -917,7 +625,7 @@ class MemoryStore:
         window_pattern: Optional[str] = None,                                 
         min_confidence: float = DEFAULT_MIN_CONFIDENCE                        
     ) -> Optional[Dict[str, Any]]:                                            
-                                                               
+                                                            
                                                                             
         conn = self._get_connection()                                         
         cursor = conn.cursor()                                                
@@ -1160,8 +868,8 @@ class MemoryStore:
         if app_name:                                                       
             cursor.execute('''                                             
                 SELECT *,                                                  
-                    CAST(success_count AS REAL) /                          
-                    CAST(success_count + failure_count AS REAL) AS success_rate,
+                    COALESCE(CAST(success_count AS REAL) /                          
+                    NULLIF(CAST(success_count + failure_count AS REAL), 0), 0.0) AS success_rate,
                     (success_count + failure_count) AS total_count         
                 FROM method_statistics                                     
                 WHERE action = ? AND app_name = ?                          
@@ -1174,8 +882,8 @@ class MemoryStore:
                                     
         cursor.execute('''                                                 
             SELECT *,                                                      
-                CAST(success_count AS REAL) /                              
-                CAST(success_count + failure_count AS REAL) AS success_rate,
+                COALESCE(CAST(success_count AS REAL) /                              
+                NULLIF(CAST(success_count + failure_count AS REAL), 0), 0.0) AS success_rate,
                 (success_count + failure_count) AS total_count             
             FROM method_statistics                                         
             WHERE action = ? AND app_name IS NULL                          
@@ -1183,7 +891,7 @@ class MemoryStore:
         ''', (action,))                                                    
                                                                             
         return [self._row_to_dict(row) for row in cursor.fetchall()]       
-                                                                                                                                         
+                                                                                                                                        
     def get_best_method(                                                      
         self,                                                                 
         action: str,                                                          
@@ -1198,13 +906,14 @@ class MemoryStore:
         if app_name:                                                       
             cursor.execute('''                                             
                 SELECT method_used,                                        
-                    CAST(success_count AS REAL) /                          
-                    CAST(success_count + failure_count AS REAL) AS success_rate
+                    COALESCE(CAST(success_count AS REAL) /                          
+                    NULLIF(CAST(success_count + failure_count AS REAL), 0), 0.0) AS success_rate
                 FROM method_statistics                                     
                 WHERE action = ?                                           
                     AND app_name = ?                                         
-                    AND (success_count + failure_count) >= ?                 
-                HAVING success_rate >= ?                                   
+                    AND (success_count + failure_count) >= ?
+                    AND COALESCE(CAST(success_count AS REAL) /
+                        NULLIF(CAST(success_count + failure_count AS REAL), 0), 0.0) >= ?
                 ORDER BY success_rate DESC, avg_duration_ms ASC            
                 LIMIT 1                                                    
             ''', (action, app_name, min_uses, min_success_rate))           
@@ -1215,13 +924,14 @@ class MemoryStore:
                                             
         cursor.execute('''                                                 
             SELECT method_used,                                            
-                CAST(success_count AS REAL) /                              
-                CAST(success_count + failure_count AS REAL) AS success_rate
+                COALESCE(CAST(success_count AS REAL) /                              
+                NULLIF(CAST(success_count + failure_count AS REAL), 0), 0.0) AS success_rate
             FROM method_statistics                                         
             WHERE action = ?                                               
                 AND app_name IS NULL                                         
                 AND (success_count + failure_count) >= ?                     
-                AND success_rate >= ?                                       
+                AND COALESCE(CAST(success_count AS REAL) /
+                    NULLIF(CAST(success_count + failure_count AS REAL), 0), 0.0) >= ?
             ORDER BY success_rate DESC, avg_duration_ms ASC                
             LIMIT 1                                                        
         ''', (action, min_uses, min_success_rate))                         
@@ -1447,13 +1157,14 @@ class MemoryStore:
         if app_name:                                                       
             cursor.execute('''                                             
                 SELECT *,                                                  
-                    CAST(success_count AS REAL) /                          
-                    CAST(attempt_count AS REAL) AS success_rate            
+                    COALESCE(CAST(success_count AS REAL) /                          
+                    NULLIF(CAST(attempt_count AS REAL), 0), 0.0) AS success_rate            
                 FROM error_recovery                                        
                 WHERE failed_action = ?                                    
                     AND error_pattern LIKE ?                                 
-                    AND app_name = ?                                         
-                HAVING success_rate >= ?                                   
+                    AND app_name = ?
+                    AND COALESCE(CAST(success_count AS REAL) /
+                        NULLIF(CAST(attempt_count AS REAL), 0), 0.0) >= ?
                 ORDER BY success_rate DESC, attempt_count DESC             
                 LIMIT 1                                                    
             ''', (failed_action, f"%{error_pattern}%",                     
@@ -1464,19 +1175,21 @@ class MemoryStore:
                                                                             
         cursor.execute('''                                                 
             SELECT *,                                                      
-                CAST(success_count AS REAL) /                              
-                CAST(attempt_count AS REAL) AS success_rate                
+                COALESCE(CAST(success_count AS REAL) /                              
+                NULLIF(CAST(attempt_count AS REAL), 0), 0.0) AS success_rate                
             FROM error_recovery                                            
             WHERE failed_action = ?                                        
                 AND error_pattern LIKE ?                                     
-                AND app_name IS NULL                                         
-            HAVING success_rate >= ?                                       
+                AND app_name IS NULL
+                AND COALESCE(CAST(success_count AS REAL) /
+                    NULLIF(CAST(attempt_count AS REAL), 0), 0.0) >= ?
             ORDER BY success_rate DESC, attempt_count DESC                 
             LIMIT 1                                                        
         ''', (failed_action, f"%{error_pattern}%", min_success_rate))      
                                                                             
         row = cursor.fetchone()                                            
         return self._row_to_dict(row) if row else None                     
+                   
                                                                             
                                                                             
                                                                             
@@ -1492,20 +1205,22 @@ class MemoryStore:
         if failed_action:                                                     
             cursor.execute('''                                                
                 SELECT *,                                                     
-                    CAST(success_count AS REAL) /                             
-                    CAST(attempt_count AS REAL) AS success_rate               
+                    COALESCE(CAST(success_count AS REAL) /                             
+                    NULLIF(CAST(attempt_count AS REAL), 0), 0.0) AS success_rate               
                 FROM error_recovery                                           
-                WHERE failed_action = ?                                       
-                HAVING success_rate >= ?                                      
+                WHERE failed_action = ?
+                    AND COALESCE(CAST(success_count AS REAL) /
+                        NULLIF(CAST(attempt_count AS REAL), 0), 0.0) >= ?
                 ORDER BY success_rate DESC                                    
             ''', (failed_action, min_success_rate))                           
         else:                                                                 
             cursor.execute('''                                                
                 SELECT *,                                                     
-                    CAST(success_count AS REAL) /                             
-                    CAST(attempt_count AS REAL) AS success_rate               
-                FROM error_recovery                                           
-                HAVING success_rate >= ?                                      
+                    COALESCE(CAST(success_count AS REAL) /                             
+                    NULLIF(CAST(attempt_count AS REAL), 0), 0.0) AS success_rate               
+                FROM error_recovery
+                WHERE COALESCE(CAST(success_count AS REAL) /
+                    NULLIF(CAST(attempt_count AS REAL), 0), 0.0) >= ?
                 ORDER BY success_rate DESC                                    
             ''', (min_success_rate,))                                         
                                                                             
@@ -1529,8 +1244,8 @@ class MemoryStore:
             cursor.execute('''                                             
                 DELETE FROM task_executions                                
                 WHERE id NOT IN (                                          
-                    SELECORDERT id FROM task_executions                         
-                     BY timestamp DESC                                
+                    SELECT id FROM task_executions                         
+                    ORDER BY timestamp DESC                                
                     LIMIT ?                                                
                 )                                                          
             ''', (max_tasks,))                                             
@@ -1583,34 +1298,35 @@ class MemoryStore:
         conn = self._get_connection()                                         
         cursor = conn.cursor()                                                
                                                                             
-        stats = {}                                                            
-                                                                            
-        tables = [                                                            
-            'task_executions', 'step_executions', 'plan_cache',               
-            'command_patterns', 'element_cache', 'method_statistics',         
-            'user_preferences', 'error_recovery'                              
-        ]                                                                     
-                                                                            
-        for table in tables:                                                  
-            cursor.execute(f"SELECT COUNT(*) as count FROM {table}")          
-            stats[f'{table}_count'] = cursor.fetchone()['count']              
-                                                                            
+        stats = {}
+
+        for table in TABLE_NAMES:   
+            try:                                               
+                cursor.execute(f"SELECT COUNT(*) as count FROM {table}")          
+                stats[f'{table}_count'] = cursor.fetchone()['count']              
+            except Exception:
+                stats[f'{table}_count'] = -1
+
+        try:                                                        
         # Additional stats                                                    
-        cursor.execute('''                                                    
-            SELECT COUNT(*) as count FROM task_executions WHERE success = 1   
-        ''')                                                                  
-        stats['successful_tasks'] = cursor.fetchone()['count']                
-                                                                            
-        cursor.execute('''                                                    
-            SELECT COUNT(*) as count FROM plan_cache WHERE is_valid = 1       
-        ''')                                                                  
-        stats['valid_cached_plans'] = cursor.fetchone()['count']              
-                                                                            
-        cursor.execute('''                                                    
-            SELECT COUNT(*) as count FROM element_cache WHERE is_valid = 1    
-        ''')                                                                  
-        stats['valid_cached_elements'] = cursor.fetchone()['count']           
-                                                                            
+            cursor.execute('''                                                    
+                SELECT COUNT(*) as count FROM task_executions WHERE success = 1   
+            ''')                                                                  
+            stats['successful_tasks'] = cursor.fetchone()['count']                
+                                                                                
+            cursor.execute('''                                                    
+                SELECT COUNT(*) as count FROM plan_cache WHERE is_valid = 1       
+            ''')                                                                  
+            stats['valid_cached_plans'] = cursor.fetchone()['count']              
+                                                                                
+            cursor.execute('''                                                    
+                SELECT COUNT(*) as count FROM element_cache WHERE is_valid = 1    
+            ''')                                                                  
+            stats['valid_cached_elements'] = cursor.fetchone()['count']           
+
+        except Exception:
+            pass
+
         if self.db_path.exists():                                             
             stats['db_size_mb'] = self.db_path.stat().st_size / (1024 * 1024) 
                                                                             
@@ -1636,7 +1352,7 @@ class MemoryStore:
                                                                             
         export_data = {                                                       
             'exported_at': self._now(),                                       
-            'schema_version': schema_version,                                 
+            'schema_version': SCHEMA_VERSION,                                 
             'tables': {}                                                      
         }                                                                     
                                                                             
@@ -1665,7 +1381,6 @@ def get_memory_store() -> MemoryStore:
 __all__ = [                                                               
     'MemoryStore',                                                        
     'get_memory_store',                                                   
-    'schema_version',                                                     
     'DEFAULT_MIN_SUCCESS_RATE',                                           
     'DEFAULT_MIN_USES',                                                   
     'DEFAULT_MIN_CONFIDENCE',                                             

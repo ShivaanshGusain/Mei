@@ -46,7 +46,7 @@ class StateMachine:
         # Define allowed transitions (Safety rules)
         # e.g., You cannot go from LISTENING straight to EXECUTING (must THINK first)
         self.allowed_transitions = {
-            AgentState.IDLE: {AgentState.LISTENING, AgentState.THINKING, AgentState.ERROR, AgentState.STOPPED},
+            AgentState.IDLE: {AgentState.LISTENING, AgentState.THINKING, AgentState.ERROR, AgentState.STOPPED,AgentState.EXECUTING},
             AgentState.LISTENING: {AgentState.IDLE, AgentState.THINKING, AgentState.ERROR},
             AgentState.THINKING: {AgentState.IDLE, AgentState.PLANNING, AgentState.SPEAKING, AgentState.ERROR},
             AgentState.PLANNING: {AgentState.EXECUTING, AgentState.THINKING, AgentState.ERROR},

@@ -1,0 +1,384 @@
+{
+  "executions": [
+    {
+      "id": "session_20260308_042628",
+      "timestamp": "2026-03-08T04:26:57.811897",
+      "success": true,
+      "failure_reason": null,
+      "duration_ms": 3503.7410000000004,
+      "intent": {
+        "action": "navigate",
+        "target": "Brave",
+        "parameters": {
+          "url": "youtube.com",
+          "new_tab": true
+        },
+        "raw_command": "Open Brave and go to YouTube in new tab.",
+        "confidence": 0.8
+      },
+      "plan": {
+        "strategy": "navigate_in_new_tab_with_existing_brave",
+        "reasoning": "Brave is already running, open a new tab and navigate to YouTube",
+        "step_count": 3,
+        "steps": [
+          {
+            "index": 0,
+            "action": "focus_window",
+            "parameters": {
+              "query": "Brave"
+            },
+            "description": "",
+            "status": "COMPLETED"
+          },
+          {
+            "index": 1,
+            "action": "hotkey",
+            "parameters": {
+              "keys": [
+                "ctrl",
+                "t"
+              ]
+            },
+            "description": "",
+            "status": "COMPLETED"
+          },
+          {
+            "index": 2,
+            "action": "navigate_url",
+            "parameters": {
+              "url": "youtube.com"
+            },
+            "description": "",
+            "status": "COMPLETED"
+          }
+        ]
+      },
+      "step_results": [
+        {
+          "step_index": 0,
+          "success": true,
+          "method_used": "window_manager",
+          "error": null,
+          "data_key": [
+            "hwnd",
+            "title",
+            "process"
+          ]
+        },
+        {
+          "step_index": 1,
+          "success": true,
+          "method_used": "pyautogui",
+          "error": null,
+          "data_key": [
+            "keys",
+            "key_count"
+          ]
+        },
+        {
+          "step_index": 2,
+          "success": true,
+          "method_used": "browser_navigation",
+          "error": null,
+          "data_key": [
+            "url",
+            "browser",
+            "new_tab",
+            "window_title"
+          ]
+        }
+      ],
+      "final_context": {
+        "current_window": {
+          "hwnd": 2165142,
+          "title": "How I Built a Real-Time Stock Data Pipeline from Scratch (with Kafka, Airflow, and Snowflake) | by DataBear | Medium - Brave",
+          "process": "brave.exe"
+        },
+        "variables": {
+          "step_0_verify_failed": "Window is still maximized",
+          "last_hotkey": [
+            "ctrl",
+            "t"
+          ],
+          "navigate_url": "https://youtube.com"
+        },
+        "cached_element": []
+      }
+    },
+    {
+      "id": "session_20260308_042628",
+      "timestamp": "2026-03-08T04:27:19.281159",
+      "success": true,
+      "failure_reason": null,
+      "duration_ms": 3469.713,
+      "intent": {
+        "action": "navigate",
+        "target": "YouTube",
+        "parameters": {
+          "url": "YouTube.com"
+        },
+        "raw_command": "Open, brave and go to YouTube in YouTube.",
+        "confidence": 0.8
+      },
+      "plan": {
+        "strategy": "navigate_to_youtube_in_new_tab",
+        "reasoning": "YouTube is requested, but the target app (YouTube) is not running. A new tab will be opened in the existing browser.",
+        "step_count": 3,
+        "steps": [
+          {
+            "index": 0,
+            "action": "focus_window",
+            "parameters": {
+              "query": "YouTube - Brave"
+            },
+            "description": "",
+            "status": "COMPLETED"
+          },
+          {
+            "index": 1,
+            "action": "hotkey",
+            "parameters": {
+              "keys": [
+                "ctrl",
+                "t"
+              ]
+            },
+            "description": "",
+            "status": "COMPLETED"
+          },
+          {
+            "index": 2,
+            "action": "navigate_url",
+            "parameters": {
+              "url": "YouTube.com"
+            },
+            "description": "",
+            "status": "COMPLETED"
+          }
+        ]
+      },
+      "step_results": [
+        {
+          "step_index": 0,
+          "success": true,
+          "method_used": "window_manager",
+          "error": null,
+          "data_key": [
+            "hwnd",
+            "title",
+            "process"
+          ]
+        },
+        {
+          "step_index": 1,
+          "success": true,
+          "method_used": "pyautogui",
+          "error": null,
+          "data_key": [
+            "keys",
+            "key_count"
+          ]
+        },
+        {
+          "step_index": 2,
+          "success": true,
+          "method_used": "browser_navigation",
+          "error": null,
+          "data_key": [
+            "url",
+            "browser",
+            "new_tab",
+            "window_title"
+          ]
+        }
+      ],
+      "final_context": {
+        "current_window": {
+          "hwnd": 2165142,
+          "title": "(248) YouTube - Brave",
+          "process": "brave.exe"
+        },
+        "variables": {
+          "step_0_verify_failed": "Window is still maximized",
+          "last_hotkey": [
+            "ctrl",
+            "t"
+          ],
+          "navigate_url": "https://YouTube.com"
+        },
+        "cached_element": []
+      }
+    },
+    {
+      "id": "session_20260308_042628",
+      "timestamp": "2026-03-08T04:27:39.232030",
+      "success": true,
+      "failure_reason": null,
+      "duration_ms": 3439.228,
+      "intent": {
+        "action": "navigate",
+        "target": "browser",
+        "parameters": {
+          "url": "youtube.com",
+          "new_tab": true
+        },
+        "raw_command": "Open, breathe and go to YouTube in new time.",
+        "confidence": 0.8
+      },
+      "plan": {
+        "strategy": "navigate_new_tab_in_existing_browser",
+        "reasoning": "YouTube is requested in a new tab, and the browser is already running (Brave), so we need to open a new tab and navigate to the URL.",
+        "step_count": 3,
+        "steps": [
+          {
+            "index": 0,
+            "action": "focus_window",
+            "parameters": {
+              "query": "YouTube - Brave"
+            },
+            "description": "",
+            "status": "COMPLETED"
+          },
+          {
+            "index": 1,
+            "action": "hotkey",
+            "parameters": {
+              "keys": [
+                "ctrl",
+                "t"
+              ]
+            },
+            "description": "",
+            "status": "COMPLETED"
+          },
+          {
+            "index": 2,
+            "action": "navigate_url",
+            "parameters": {
+              "url": "youtube.com"
+            },
+            "description": "",
+            "status": "COMPLETED"
+          }
+        ]
+      },
+      "step_results": [
+        {
+          "step_index": 0,
+          "success": true,
+          "method_used": "window_manager",
+          "error": null,
+          "data_key": [
+            "hwnd",
+            "title",
+            "process"
+          ]
+        },
+        {
+          "step_index": 1,
+          "success": true,
+          "method_used": "pyautogui",
+          "error": null,
+          "data_key": [
+            "keys",
+            "key_count"
+          ]
+        },
+        {
+          "step_index": 2,
+          "success": true,
+          "method_used": "browser_navigation",
+          "error": null,
+          "data_key": [
+            "url",
+            "browser",
+            "new_tab",
+            "window_title"
+          ]
+        }
+      ],
+      "final_context": {
+        "current_window": {
+          "hwnd": 2165142,
+          "title": "YouTube - Brave",
+          "process": "brave.exe"
+        },
+        "variables": {
+          "step_0_verify_failed": "Window is still maximized",
+          "last_hotkey": [
+            "ctrl",
+            "t"
+          ],
+          "navigate_url": "https://youtube.com"
+        },
+        "cached_element": []
+      }
+    },
+    {
+      "id": "session_20260308_042628",
+      "timestamp": "2026-03-08T04:38:51.404169",
+      "success": false,
+      "failure_reason": "Validation failed: Missing required parameter: 'query', 'title', 'app_name', or 'hwnd'",
+      "duration_ms": 0.0,
+      "intent": {
+        "action": "navigate",
+        "target": "current",
+        "parameters": {
+          "url": "https://www.google.com/search?q=go+go+go+go"
+        },
+        "raw_command": "I'm sorry guys, I'm going to go go go go",
+        "confidence": 0.8
+      },
+      "plan": {
+        "strategy": "navigate_to_google_search",
+        "reasoning": "User wants to navigate to Google search with a specific query, open a new tab",
+        "step_count": 3,
+        "steps": [
+          {
+            "index": 0,
+            "action": "focus_window",
+            "parameters": {},
+            "description": "",
+            "status": "FAILED"
+          },
+          {
+            "index": 1,
+            "action": "hotkey",
+            "parameters": {
+              "keys": [
+                "ctrl",
+                "t"
+              ]
+            },
+            "description": "",
+            "status": "PENDING"
+          },
+          {
+            "index": 2,
+            "action": "navigate_url",
+            "parameters": {
+              "url": "https://www.google.com/search?q=go+go+go+go"
+            },
+            "description": "",
+            "status": "PENDING"
+          }
+        ]
+      },
+      "step_results": [],
+      "final_context": {
+        "current_window": null,
+        "variables": {},
+        "cached_element": []
+      }
+    }
+  ],
+  "metadata": {
+    "version": "1.0",
+    "created_at": "2026-03-08T04:26:28.339573",
+    "last_updated": "2026-03-08T04:38:51.404169",
+    "total_executions": 4,
+    "total_success": 0,
+    "total_failures": 1,
+    "total_successes": 3
+  }
+}

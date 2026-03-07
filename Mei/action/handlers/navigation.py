@@ -67,7 +67,14 @@ class NavigateUrlHander(ActionHandler):
                 error =f"Exception during navigation: {str(e)}",
                 method_used="none"
             )
-    
+        
+    def _is_browser(self, process_name: str) -> bool:
+        if not process_name:
+            return False
+        process_lower = process_name.lower()
+        return any(browser in process_lower for browser in BROWSER_PROCESSES)
+
+
     def _normalized_url(self,url:str)->str:
         url = url.strip()
         if any(url.lower().startswith(p) for p in URL_PREFIXES):

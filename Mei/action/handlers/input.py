@@ -185,7 +185,7 @@ class TypeTextHandler(ActionHandler):
         except:
             old_clipboard = ""
         
-        pyautogui.hotkey('ctr','v')
+        pyautogui.hotkey('ctrl','v')
         time.sleep(0.05)
 
         try:
@@ -207,8 +207,13 @@ class HotkeyHandler(ActionHandler):
             return ( False, "Missing required parameter: 'keys'")
         
         keys = params['keys']
+        
+        if isinstance(keys, str):
+            keys = [k.strip() for k in keys.split('+') if k.strip()]
+            params['keys'] = keys 
+        
         if not isinstance(keys, (list, tuple)):
-            return (False, "Parameter 'keys' must be a list")
+            return (False, "Parameter 'keys' must be a list or string like 'ctrl+c'")
         
         if len(keys) == 0:
             return (False, "Parameter 'keys' cannot be empty")
@@ -228,7 +233,7 @@ class HotkeyHandler(ActionHandler):
 
             dangerous_combos = [
                 ["alt", 'f4'],
-                ['ctr;','w'],
+                ['ctrl;','w'],
                 ['ctrl', 'shift','delete']
             ]
             keys_set = set(keys)
@@ -277,14 +282,14 @@ class ClickHandler(ActionHandler):
         return True
     
     def validate(self, params:Dict[str,Any])->Tuple[bool, Optional[str]]:
-        has_query = 'query' in params
+        has_query = 'query' in params or 'element_name' in params
         has_coords = 'x' in params and 'y' in params
 
         if not has_query and not has_coords:
-            return (False, "Missing required parameter: 'query' or 'x,y' coordinates")
+            return (False, "Missing required parameter: 'query', 'element_name', or 'x,y' coordinates")
         
         if has_query:
-            query = params['query']
+            query = params.get('query') or params.get('element_name')
             if query is None or str(query).strip() == "":
                 return (False, "Parameter 'query' cannot be empty")
         
@@ -308,7 +313,7 @@ class ClickHandler(ActionHandler):
     
     def execute(self, params: Dict[str, Any], context: ExecutionContext)->ActionResult:
         try:
-            query = params.get('query')
+            query = params.get('query') or params.get('element_name')
             x = params.get('x')
             y = params.get('y')
             click_type = params.get('click_type','left')
@@ -448,7 +453,7 @@ class ClickHandler(ActionHandler):
         
         if not element:
             return ActionResult(
-                sucess = False,
+                success = False,
                 error = f"Element '{query}' not found via UI Automation",
                 method_used="ui_automatoin"
             )
@@ -622,11 +627,70 @@ class ScrollHander(ActionHandler):
                 method_used='pyautogui'
             )
         
+
+class PressKeyHandler(ActionHandler):
+    @property
+    def action_name(self) -> str:
+        return 'press_key'
+    
+    @property
+    def supports_verification(self) -> bool:
+        return False
+    
+    def validate(self, params: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
+        if 'key' not in params:
+            return (False, "Missing required parameter: 'key'")
+        key = params['key']
+        if key is None or str(key).strip() == "":
+            return (False, "Parameter 'key' cannot be empty")
+        return (True, None)
+    
+    def execute(self, params: Dict[str, Any], context: ExecutionContext) -> ActionResult:
+        try:
+            key = str(params['key']).lower().strip()
+            presses = int(params.get('presses', 1))
+            
+            KEY_MAP = {
+                'enter': 'enter', 'return': 'enter',
+                'tab': 'tab',
+                'escape': 'esc', 'esc': 'esc',
+                'delete': 'delete', 'del': 'delete',
+                'backspace': 'backspace',
+                'space': 'space', 'spacebar': 'space',
+                'up': 'up', 'down': 'down', 'left': 'left', 'right': 'right',
+                'home': 'home', 'end': 'end',
+                'pageup': 'pageup', 'page up': 'pageup',
+                'pagedown': 'pagedown', 'page down': 'pagedown',
+                'f1': 'f1', 'f2': 'f2', 'f3': 'f3', 'f4': 'f4',
+                'f5': 'f5', 'f6': 'f6', 'f7': 'f7', 'f8': 'f8',
+                'f9': 'f9', 'f10': 'f10', 'f11': 'f11', 'f12': 'f12',
+            }
+            
+            mapped_key = KEY_MAP.get(key, key)
+            
+            for _ in range(presses):
+                pyautogui.press(mapped_key)
+                if presses > 1:
+                    time.sleep(0.05)
+            
+            return ActionResult(
+                success=True,
+                data={'key': mapped_key, 'original_key': key, 'presses': presses},
+                method_used='pyautogui'
+            )
+        except Exception as e:
+            return ActionResult(
+                success=False,
+                error=f"Exception pressing key: {str(e)}",
+                method_used='pyautogui'
+            )
+
 INPUT_HANDLERS = [
     TypeTextHandler,
     HotkeyHandler,
     ClickHandler,
-    ScrollHander
+    ScrollHander,
+    PressKeyHandler
 ]
 
 def get_input_handlers()->list:
@@ -639,5 +703,6 @@ __all__ = [
     'ScrollHandler',
     'INPUT_HANDLERS',
     'get_input_handlers',
+    'PressKeyHandler'
 ]
             

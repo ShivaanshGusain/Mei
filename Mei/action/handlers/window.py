@@ -5,6 +5,7 @@ from ...core.config import ActionResult, VerifyResult, WindowInfo
 from ...perception.System.windows import get_window_manager
 from ..context import ExecutionContext
 
+import time
 import win32gui
 
 def _resolve_window(params: Dict[str,Any], context: ExecutionContext, require_match: bool = True) ->Tuple[Optional[WindowInfo], Optional[str]]:
@@ -17,7 +18,7 @@ def _resolve_window(params: Dict[str,Any], context: ExecutionContext, require_ma
         else:
             return ( None, f"Window with hwnd {hwnd} not found")
         
-    query  = params.get('query')
+    query  = params.get('query') or params.get('title') or params.get('app_name')
     if query:
         window = window_manager.find_window(str(query))
         if window:
@@ -36,6 +37,124 @@ def _resolve_window(params: Dict[str,Any], context: ExecutionContext, require_ma
     
     return ( None, 'No window available')
 
+
+class FindWindowHandler(ActionHandler):
+    @property
+    def action_name(self) -> str:
+        return 'find_window'
+    
+    @property
+    def supports_verification(self) -> bool:
+        return True
+    
+    def validate(self, params: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
+        has_query = 'query' in params or 'title' in params
+        has_hwnd = 'hwnd' in params
+        if not has_query and not has_hwnd:
+            return (False, "Missing required parameter: 'query', 'title', or 'hwnd'")
+        query = params.get('query') or params.get('title')
+        if query is not None and str(query).strip() == "":
+            return (False, "Search query cannot be empty")
+        return (True, None)
+    
+    def execute(self, params: Dict[str, Any], context: ExecutionContext) -> ActionResult:
+        try:
+            query = params.get('query') or params.get('title')
+            hwnd = params.get('hwnd')
+            
+            window_manager = get_window_manager()
+            
+            if hwnd is not None:
+                window = window_manager.get_window_by_hwnd(int(hwnd))
+                if window:
+                    context.set_current_window(window)
+                    return ActionResult(
+                        success=True,
+                        data={'hwnd': window.hwnd, 'title': window.title, 'process': window.process_name},
+                        method_used='window_manager'
+                    )
+                return ActionResult(success=False, error=f"No window with hwnd {hwnd}", method_used='window_manager')
+            
+            window = window_manager.find_window(str(query))
+            if window:
+                context.set_current_window(window)
+                return ActionResult(
+                    success=True,
+                    data={'hwnd': window.hwnd, 'title': window.title, 'process': window.process_name},
+                    method_used='window_manager'
+                )
+            
+            return ActionResult(
+                success=False,
+                error=f"Window matching '{query}' not found",
+                method_used='window_manager'
+            )
+        except Exception as e:
+            return ActionResult(success=False, error=f"Exception finding window: {str(e)}", method_used='window_manager')
+    
+    def verify(self, params: Dict[str, Any], context: ExecutionContext, result: ActionResult) -> VerifyResult:
+        hwnd = result.data.get('hwnd') if result.data else None
+        if hwnd is None:
+            return VerifyResult(verified=False, confidence=0.5, reason="No hwnd in result")
+        if win32gui.IsWindow(hwnd):
+            return VerifyResult(verified=True, confidence=0.95, reason="Window exists")
+        return VerifyResult(verified=False, confidence=0.9, reason="Window no longer exists")
+
+
+class VerifyWindowHandler(ActionHandler):
+    @property
+    def action_name(self) -> str:
+        return 'verify_window'
+    
+    @property
+    def supports_verification(self) -> bool:
+        return False
+    
+    def validate(self, params: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
+        if 'expected_title' not in params and 'query' not in params and 'title' not in params:
+            return (False, "Missing required parameter: 'expected_title', 'query', or 'title'")
+        if 'timeout' in params:
+            try:
+                t = float(params['timeout'])
+                if t <= 0:
+                    return (False, "Parameter 'timeout' must be positive")
+            except (ValueError, TypeError):
+                return (False, "Parameter 'timeout' must be a number")
+        return (True, None)
+    
+    def execute(self, params: Dict[str, Any], context: ExecutionContext) -> ActionResult:
+        try:
+            query = params.get('expected_title') or params.get('query') or params.get('title')
+            timeout = float(params.get('timeout', 5))
+            
+            window_manager = get_window_manager()
+            start_time = time.time()
+            
+            while (time.time() - start_time) < timeout:
+                window = window_manager.find_window(str(query))
+                if window:
+                    context.set_current_window(window)
+                    return ActionResult(
+                        success=True,
+                        data={
+                            'hwnd': window.hwnd,
+                            'title': window.title,
+                            'process': window.process_name,
+                            'wait_time': round(time.time() - start_time, 2)
+                        },
+                        method_used='window_manager'
+                    )
+                time.sleep(0.5)
+            
+            return ActionResult(
+                success=False,
+                error=f"Window '{query}' did not appear within {timeout}s",
+                method_used='window_manager'
+            )
+        except Exception as e:
+            return ActionResult(success=False, error=f"Exception verifying window: {str(e)}", method_used='window_manager')
+
+
 class FocusWindowHandler(ActionHandler):
     @property
     def action_name(self)-> str:
@@ -46,16 +165,16 @@ class FocusWindowHandler(ActionHandler):
         return True
     
     def validate(self, params: Dict[str, Any])-> Tuple[bool, Optional[str]]:
-        has_query = 'query' in params
+        has_query = 'query' in params or 'title' in params or 'app_name' in params
         has_hwnd = 'hwnd' in params
-
+        
         if not has_query and not has_hwnd:
-            return (False, "Missing required parameter: 'query' or 'hwnd'")
+            return (False, "Missing required parameter: 'query', 'title', 'app_name', or 'hwnd'")
         
         if has_query:
-            query = params['query']
-            if query is None or str(query).strip() == "":
-                return (False,"Parameter 'query' cannot be empty")
+            query = params.get('query') or params.get('title') or params.get('app_name')
+            if query is not None and str(query).strip() == "":
+                return (False, "Search query/title cannot be an empty string")
         
         if has_hwnd:
             try:
@@ -91,7 +210,7 @@ class FocusWindowHandler(ActionHandler):
                 return ActionResult(
                     success =False,
                     error = f'Failed to focus window: {window.title}',
-                    method_used="window_manger"
+                    method_used="window_manager"
                 )
         except Exception as e:
             return ActionResult(
@@ -146,18 +265,25 @@ class MinimizeWindowHandler(ActionHandler):
     def supports_verification(self)->bool:
         return True
     
-    def validate(self, params:Dict[str,Any])->Tuple[bool, Optional[str]]:
-        if 'query' in params:
-            query = params['query']
-            if query is not None and str(query).strip() == "":
-                return (False, "Parameter 'query' cannot be empty string")
-        if 'hwnd' in params:
-            try:
-                int(params['hwnd'])
-            except ( ValueError, TypeError):
-                return (False, "Parameter 'hwnd' must be a valid integer")
-        return (True, None)
-    
+    def validate(self, params: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
+            has_query = 'query' in params or 'title' in params or 'app_name' in params
+            has_hwnd = 'hwnd' in params
+
+            if not has_query and not has_hwnd:
+                return (False, "Missing required parameter: 'query', 'title', 'app_name', or 'hwnd'")
+            
+            if has_query:
+                query = params.get('query') or params.get('title') or params.get('app_name')
+                if query is not None and str(query).strip() == "":
+                    return (False, "Search query/title cannot be an empty string")
+            
+            if has_hwnd:
+                try:
+                    int(params['hwnd'])
+                except (ValueError, TypeError):
+                    return (False, "Parameter 'hwnd' must be a valid integer")
+                    
+            return (True, None)    
     def execute(self, params:Dict[str,Any], context:ExecutionContext)->ActionResult:
         try:
             window,error = _resolve_window(params, context,require_match=False)
@@ -247,16 +373,24 @@ class MaximizeWindowHandler(ActionHandler):
     @property
     def supports_verification(self)->bool:
         return True
-    def validate(self, params:Dict[str, Any])->Tuple[bool, Optional[str]]:
-        if 'query' in params:
-            query = params['query']
+    def validate(self, params: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
+        has_query = 'query' in params or 'title' in params or 'app_name' in params
+        has_hwnd = 'hwnd' in params
+
+        if not has_query and not has_hwnd:
+            return (False, "Missing required parameter: 'query', 'title', 'app_name', or 'hwnd'")
+        
+        if has_query:
+            query = params.get('query') or params.get('title') or params.get('app_name')
             if query is not None and str(query).strip() == "":
-                return (False, "Parameter 'query' cannot be empty string")
-        if 'hwnd' in params:
+                return (False, "Search query/title cannot be an empty string")
+        
+        if has_hwnd:
             try:
                 int(params['hwnd'])
-            except(ValueError, TypeError):
+            except (ValueError, TypeError):
                 return (False, "Parameter 'hwnd' must be a valid integer")
+                
         return (True, None)
     
     def execute(self, params:Dict[str,Any], context:ExecutionContext)->ActionResult:
@@ -350,16 +484,24 @@ class RestoreWindowHandler(ActionHandler):
     def supports_verification(self)->bool:
         return True
     
-    def validate(self, params:Dict[str, Any])->Tuple[bool, Optional[str]]:
-        if 'query' in params:
-            query = params['query']
+    def validate(self, params: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
+        has_query = 'query' in params or 'title' in params or 'app_name' in params
+        has_hwnd = 'hwnd' in params
+
+        if not has_query and not has_hwnd:
+            return (False, "Missing required parameter: 'query', 'title', 'app_name', or 'hwnd'")
+        
+        if has_query:
+            query = params.get('query') or params.get('title') or params.get('app_name')
             if query is not None and str(query).strip() == "":
-                return (False, "Parameter 'query' cannot be empty string")
-        if 'hwnd' in params:
+                return (False, "Search query/title cannot be an empty string")
+        
+        if has_hwnd:
             try:
                 int(params['hwnd'])
-            except(ValueError, TypeError):
+            except (ValueError, TypeError):
                 return (False, "Parameter 'hwnd' must be a valid integer")
+                
         return (True, None)
     
     def execute(self, params:Dict[str, Any], context:ExecutionContext)->ActionResult:
@@ -438,7 +580,7 @@ class RestoreWindowHandler(ActionHandler):
                 return VerifyResult(
                     verified=False,
                     confidence=0.90,
-                    reason="Window is not still {state}"
+                    reason=f"Window is still {state}"
                 )
         except Exception as e:
             return VerifyResult(
@@ -455,16 +597,24 @@ class CloseWindowHandler(ActionHandler):
     def supports_verification(self)->bool:
         return True
     
-    def validate(self, params:Dict[str,Any])->Tuple[bool, Optional[str]]:
-        if 'query' in params:
-            query = params['query']
+    def validate(self, params: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
+        has_query = 'query' in params or 'title' in params or 'app_name' in params
+        has_hwnd = 'hwnd' in params
+
+        if not has_query and not has_hwnd:
+            return (False, "Missing required parameter: 'query', 'title', 'app_name', or 'hwnd'")
+        
+        if has_query:
+            query = params.get('query') or params.get('title') or params.get('app_name')
             if query is not None and str(query).strip() == "":
-                return (False,"Parameter 'query' cannot be empty")
-        if 'hwnd' in params:
+                return (False, "Search query/title cannot be an empty string")
+        
+        if has_hwnd:
             try:
                 int(params['hwnd'])
-            except ( ValueError, TypeError):
+            except (ValueError, TypeError):
                 return (False, "Parameter 'hwnd' must be a valid integer")
+                
         return (True, None)
     
     def execute(self, params: Dict[str, Any], context: ExecutionContext)->ActionResult:
@@ -525,7 +675,7 @@ class CloseWindowHandler(ActionHandler):
                 return VerifyResult(
                     verified=True,
                     confidence=0.95,
-                    reason= "Window confirned as closed ( no loger exists )"
+                    reason="Window confirmed as closed (no longer exists)"
                 )
             else:
                 return VerifyResult(
@@ -542,6 +692,8 @@ class CloseWindowHandler(ActionHandler):
             )
     
 WINDOW_HANDLERS = [
+    FindWindowHandler,
+    VerifyWindowHandler,
     FocusWindowHandler,
     MinimizeWindowHandler,
     MaximizeWindowHandler,
