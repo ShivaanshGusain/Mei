@@ -20,17 +20,17 @@ def _on_speech_started(event):
 def _on_speech_ended(event):
     audio = event.data.get('audio', b'')
     duration = len(audio) / (2 * 16000)  # int16 = 2 bytes, 16kHz
-    print(f"🔇 Speech ended: {len(audio)} bytes ({duration:.1f}s)")
+    print(f"Speech ended: {len(audio)} bytes ({duration:.1f}s)")
 
 
 def _on_transcribe_completed(event):
     text = event.data.get('text', '')
     lang = event.data.get('language', '?')
-    print(f"📝 Transcribed: '{text}' (lang={lang})")
+    print(f"Transcribed: '{text}' (lang={lang})")
 
 
 def _on_error(event):
-    print(f"❌ Error from {event.source}: {event.data}")
+    print(f"Error from {event.source}: {event.data}")
 
 
 def text_input_thread():
@@ -95,7 +95,7 @@ def main():
     print(f"  Transcriber running: {transcriber.running}")
     print(f"--------------------\n")
 
-    print("\n🎙️  Voice input active: speak to control Mei")
+    print("\nVoice input active: speak to control Mei")
 
     # 7. Start keyboard input in background
     input_thread = threading.Thread(target=text_input_thread, daemon=True)
