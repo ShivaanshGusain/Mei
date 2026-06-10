@@ -1,15 +1,15 @@
 import time
 from typing import Dict, Any, Tuple, Optional
-from datetime import datetime
+# from datetime import datetime
 
 from ...core.task import ActionHandler
-from ...core.config import ActionResult,VerifyResult,ElementReference
+from ...core.config import ActionResult #,VerifyResult,ElementReference
 
-from ...perception.System.windows import get_window_manager
-from ...perception.System.accessibility import UIAutomationManager, UIElement
+# from ...perception.System.windows import get_window_manager
+from ...perception.System.accessibility import UIAutomationManager  #, UIElement
 
 from ...perception.Visual.screen import ScreenCapture
-from ...perception.Visual.analyzer import get_visual_analyzer, VisualElement
+# from ...perception.Visual.analyzer import get_visual_analyzer, VisualElement
 
 from ..context import ExecutionContext
 
@@ -21,6 +21,7 @@ FIND_RETRY_INTERVAL = 0.5
 _ui_automation_manager: Optional[UIAutomationManager] = None
 _screen_capture: Optional[ScreenCapture] = None
 
+"""
 def _get_ui_automation()->UIAutomationManager:
     global _ui_automation_manager
     if _ui_automation_manager is None:
@@ -32,6 +33,7 @@ def _get_screen_capture()->ScreenCapture:
     if _screen_capture is None:
         _screen_capture = ScreenCapture()
     return _screen_capture
+"""
 
 class WaitHandler(ActionHandler):
     @property
@@ -88,6 +90,7 @@ class WaitHandler(ActionHandler):
                 method_used='time_sleep'
             )
 
+"""
 class FindElementHandler(ActionHandler):
     @property
     def action_name(self)->str:
@@ -276,14 +279,15 @@ class FindElementHandler(ActionHandler):
                 confidence=0.5,
                 reason = "Element not in cache or stale"
             )
-        
-UTIL_HANDLERS = [WaitHandler, FindElementHandler]
+"""
+
+# UTIL_HANDLERS = [WaitHandler, FindElementHandler]
+UTIL_HANDLERS = [WaitHandler]
 def get_util_handers()->list:
     return [handler() for handler in UTIL_HANDLERS]
 
 __all__ = [
     'WaitHandler',
-    'FindElementHandler',
     'UTIL_HANDLERS',
     'get_util_handers'
 ]

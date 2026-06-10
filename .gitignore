@@ -18,5 +18,6 @@ Waw.png
 test_annotated.png
 test.py
 logs
-
+Mei/perception/Visual/OmniParser/weights/
+Mei/perception/Visual/OmniParser/saved_models/
 known_apps.csv

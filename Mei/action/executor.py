@@ -1,5 +1,5 @@
 import time
-from typing import Dict, Any, Optional, List, Type, Tuple
+from typing import Dict, Any, Optional, List, Type, Tuple, Callable
 from datetime import datetime
 
 from ..core.task import ActionHandler, Plan, Step, Intent, StepStatus
@@ -10,13 +10,18 @@ from ..core.state import AgentState, get_state_machine
 
 
 from .context import ExecutionContext
-from  .debug.logger import get_execution_logger
+from .toolspec import ToolSpec
 
-from .handlers.window import get_window_handlers
-from .handlers.app import get_app_handlers
-from .handlers.input import get_input_handlers
-from .handlers.navigation import get_navigation_handlers
-from .handlers.utility import get_util_handers
+from .debug.logger import get_execution_logger
+
+# from .handlers.window import get_window_handlers
+# from .handlers.app import get_app_handlers
+# from .handlers.input import get_input_handlers
+# from .handlers.navigation import get_navigation_handlers
+# from .handlers.utility import get_util_handers
+
+from .handlers import register_all_tools #[TODO]
+
 
 DEFAULT_STEP_DELAY = 0.1
 MAX_PLAN_DURATION = 300.0
@@ -26,8 +31,13 @@ VERIFY_STEPS = True
 
 class PlanExecutor:
     def __init__(self, auto_subscribe: bool = True):
-        self._handlers: Dict[str, ActionHandler] = {}
-        self._register_all_handlers()
+        # self._handlers: Dict[str, ActionHandler] = {} 
+        # self._register_all_handlers()
+
+        #[UPDATE] Keeping the above line of code as comments
+
+        self._tools : Dict[str,ToolSpec]  = {}
+        register_all_tools(self)
 
         self._logger = get_execution_logger()
         self._state_machine = get_state_machine()
@@ -37,7 +47,7 @@ class PlanExecutor:
         self._is_executing: bool = False
         if auto_subscribe:
             self.start()
-
+    """
     def _register_all_handlers(self)->None:
         all_handlers = []
         try:
@@ -80,12 +90,64 @@ class PlanExecutor:
         action_name = handler.action_name
         self._handlers[action_name] = handler
         print(f"Registered handler: {action_name}")
+    """
+    
+    def register(self, name: str, impl: Callable, domain: str, *,
+                 schema: Dict[str,Any] = None,
+                 validate_fn: Callable = None,
+                 verify_fn: Callable = None,
+                 requires_screen: bool = False,
+                 requires_browser: bool = False,
+                 requires_window: bool = False,
+                 requires_ui_tree: bool = False,
+                 cost: int = 1,
+                 description: str = "") -> None:
+        """Builds a ToolSpec from args and store it."""
+        spec = ToolSpec(
+            name = name,
+            domain= domain,
+            impl=impl,
+            schema=schema or {},
+            validate_fn=validate_fn,
+            verify_fn=verify_fn,
+            requires_screen=requires_screen,
+            requires_browser=requires_browser,
+            requires_window=requires_window,
+            requires_ui_tree=requires_ui_tree,
+            cost=cost,
+            description=description
+        )
+        if name in self._tools:
+            print(f"Overwriting tool '{name}'")
+        self._tool[name] = spec
+        print(f"Registered tool: {name} [{domain}]")
 
+    
+    """
     def get_handler(self, action_name:str)->Optional[ActionHandler]:
         return self._handlers.get(action_name)
+    """
+    def get_tool(self, name: str) -> Optional[ToolSpec]:
+        return self._tools.get(name)
+    
+    """Addition"""
+    def list_tools(self)->List[Dict[str,Any]]:
+        """Expose tool metadata for the planner's context window."""
+        return[
+            {
+                "name": t.name,
+                "domain":t.domain,
+                "description":t.description,
+                "schema":t.schema,
+                "cost":t.cost,
+                "supports_verification":t.supports_verification,
+            }
+            for t in self._tools.values()
+        ]
     
     def list_actions(self)->List[str]:
-        return list(self._handlers.keys())
+        # return list(self._handlers.keys())
+        return list(self._tools.keys())
     
     def start(self)->None:
         subscribe(EventType.PLAN_CREATED, self._on_plan_created)
@@ -207,7 +269,7 @@ class PlanExecutor:
             parameters = step.parameters,
             description = step.description
         )
-
+        """
         handler = self.get_handler(step.action)
 
         if not handler:
@@ -225,10 +287,35 @@ class PlanExecutor:
                 method_used=None,                    
                 duration_ms=0.0                       
             )
-
             return (False, error_msg)
+            """
+        tool = self.get_tool(step.action)
+        if not tool:
+            error_msg = f"No handler registered for action: '{step.action}'"
+            step.status = StepStatus.FAILED
+            step.error = error_msg
+            step.completed_at = datetime.now()
+            emit(
+                EventType.PLAN_STEP_FAILED,
+                source='Executor',
+                step_index=step_index,
+                action=step.action,                   
+                parameters=step.parameters,           
+                error=error_msg,
+                method_used=None,                    
+                duration_ms=0.0                       
+            )
+            return (False, error_msg)
+
         
-        is_valid, validation_error = handler.validate(step.parameters)
+        # is_valid, validation_error = handler.validate(step.parameters)
+        
+        #Validation: use tool.validate_fn if provided, else skip
+        if tool.validate_fn:
+            is_valid, validation_error = tool.validate_fn(step.parameters)
+        else:
+            is_valid, validation_error = True, None
+
         if not is_valid:
             error_msg = f"Validation failed: {validation_error}"
             step.status = StepStatus.FAILED
@@ -248,7 +335,8 @@ class PlanExecutor:
             return (False, error_msg)
 
         try:
-            result = handler.execute( step.parameters, context)
+            # result = handler.execute( step.parameters, context)
+            result = tool.impl(step.parameters, context)
             context.add_step_result(result)
             step.result=result.data
 
@@ -274,13 +362,20 @@ class PlanExecutor:
                 return (False, error_msg)
             
             verify_result: Optional[VerifyResult] = None
-            if VERIFY_STEPS and handler.supports_verification:
+            # if VERIFY_STEPS and handler.supports_verification:
+            if VERIFY_STEPS and tool.verify_fn:
                 try:
+                    """
                     verify_result = handler.verify(
                         step.parameters, context, result
                     )
+                    """
+                    verify_result = tool.verify(
+                        step.parameters, context, result
+                    )
                     step.verified = verify_result.verified
-                    step.verification_method = 'handler_verify'
+                    step.verification_method = 'handler_verify' # Keeping this to handler for safety.
+                                                                # [TODO] changing all handler_verify -> tool_verify
 
                     if verify_result.verified:
                         print(f"Verified ( confidence: {verify_result.confidence:.2f})")
@@ -337,14 +432,22 @@ class PlanExecutor:
 
 
     def execute_single_action(self, action:str, parameters: Dict[str, Any])->ActionResult:
-        handler = self.get_handler(action)
-        if not handler:
+        # handler = self.get_handler(action)
+        # if not handler:
+        
+        tool = self.get_tool(action)
+        if not tool:
             return ActionResult(
                 success= False,
                 error = f"No handler for action: {action}"
             )
         
-        is_valid, error = handler.validate(parameters)
+        # is_valid, error = handler.validate(parameters)
+        if tool.validate_fn:
+            is_valid, error = tool.validate_fn(parameters)
+        else:
+            is_valid, error = True, None
+
         if not is_valid:
             return ActionResult(
                 success=False,
@@ -374,7 +477,8 @@ class PlanExecutor:
         context = ExecutionContext(plan = dummy_plan, intent= dummy_intent)
 
         try:
-            return handler.execute(parameters,context)
+            # return handler.execute(parameters,context)
+            return tool.impl(parameters,context)
         except Exception as e:
             return ActionResult(
                 success=False,

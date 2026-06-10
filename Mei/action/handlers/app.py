@@ -9,7 +9,151 @@ from ...perception.System.windows import get_window_manager
 
 from ..context import ExecutionContext
 
+def _launch_app_wait_for_window(pid: int, app_name: str)-> Optional['WindowInfo']:
+
+    window_manager = get_window_manager()
+    process_manager = get_process_manager()
+    start_time = time.time()
+    timeout = AppHandlerConfig.DEFAULT_LAUNCH_WAIT_SECONDS
+    while (time.time()-start_time)<timeout:
+        window = window_manager.get_window_by_pid(pid)
+        if window:
+            return window
+        if not process_manager.is_running_pid(pid):
+            fallback = window_manager.find_window(app_name)
+            if fallback:
+                return fallback
+        time.sleep(AppHandlerConfig.WINDOW_POLL_INTERVAL)
+    return None
+
+def launch_app_validate(params: Dict[str,Any])-> Tuple[bool,Optional[str]]:
+    if 'app_name' not in params:
+        return (False, "Missing required parameter: 'app_name'")
+    app_name = params['app_name']
+    if app_name is None or str(app_name).strip() == "":
+        return (False, "Parameter 'app_name' cannot be empty")
+    return (True, None)
+
+def launch_app_execute(params: Dict[str,Any], context: ExecutionContext)-> ActionResult:
+    try:
+        app_name = str(params['app_name']).strip()
+        wait_for_window = params.get('wait_for_window', True)
+        focus_if_running = params.get('focus_if_running', True)
+        
+        process_manager = get_process_manager()
+        window_manager = get_window_manager()
+
+        is_running = process_manager.is_running(app_name)
+        if is_running and focus_if_running:
+            window = window_manager.find_window(app_name)
+            if window:
+                success = window_manager.focus_window(window.hwnd)
+                if success:
+                    context.set_current_window(window)
+                    context.set_variable('launch_app', app_name)
+                    return ActionResult(
+                        success=True,
+                        data={
+                            'app_name':app_name,
+                            'already_running':True,
+                            'focus_existing':True,
+                            'hwnd':window.hwnd,
+                            'title':window.title,
+                            'pid':window.pid
+                        },
+                        method_used="process_manager"
+                    )
+        pid = process_manager.launch(app_name)
+        if pid is None:
+            return ActionResult(
+                success = False,
+                error = f"Failed to launch '{app_name}'.\n App may not be installed or path not found",
+                method_used="process_manager"
+            )
+        context.set_variable('launched_app', app_name)
+        context.set_variable('launched_pid', pid)
+        
+        window = None
+        if wait_for_window:
+                window = _launch_app_wait_for_window(pid, app_name)        
+        if window:
+            window_manager.focus_window(window.hwnd)
+            context.set_current_window(window)
+
+        return ActionResult(
+            success = True,
+            data = {
+                'app_name':app_name,
+                'pid':pid,
+                'already_running': False,
+                'window_found': window is not None,
+                'hwnd': window.hwnd if window else None,
+                'title': window.title if window else None
+            },
+            method_used="process_manager"
+        )
+    except Exception as e:
+        return ActionResult(
+            success=False,
+            error=f"Exception Launching app: {str(e)}",
+            method_used="process_manager"
+        )
+
+def launch_app_verify(params: Dict[str,Any], context: ExecutionContext, result: ActionResult)-> VerifyResult:
+    app_name = result.data.get('app_name') if result.data else None
+    pid = result.data.get('pid') if result.data else None
+    if not app_name:
+        app_name = params.get('app_name')
+    if not app_name:
+        return VerifyResult(
+            verified=False,
+            confidence=0.9,
+            reason="No app_name to verify"
+        )
+
+    try:
+        window_manager = get_window_manager()
+        process_manager = get_process_manager()
+
+        if pid:
+            win_by_pid = window_manager.get_window_by_pid(pid)
+            if win_by_pid:
+                return VerifyResult(
+                    verified=True,
+                    confidence= 1.0,
+                    reason= f"Confirmed window for PID {pid}"
+                    )
+            
+        window = window_manager.find_window(app_name)
+        if window:
+            return VerifyResult(
+                verified= True, 
+                confidence=0.9,
+                reason= f"Found window matching '{app_name}'"
+                )
+
+        if process_manager.is_running(app_name):
+            return VerifyResult(
+                verified= True,
+                confidence= 0.7, 
+                reason= f"Process '{app_name}' is running"
+                )
+
+        return VerifyResult(verified= False, 
+                            confidence=0.9,
+                            reason= f"No process or window found for '{app_name}'"
+                            )
+
+    except Exception as e:
+        return VerifyResult(
+            verified=False,
+            confidence= 0.5,
+            reason= f"Verification error: {str(e)}"
+            )        
+
+"""
 class LaunchAppHandler(ActionHandler):
+
     @property
     def action_name(self)->str:
         return "launch_app"
@@ -164,9 +308,190 @@ class LaunchAppHandler(ActionHandler):
                 confidence= 0.5,
                 reason= f"Verification error: {str(e)}"
                 )        
-            
+"""      
+LAUNCH_APP_SCHEMA = {
+    "app_name":      {"type": "str", "required": True, "description": "Name of the application to launch"},
+    "wait_for_window": {"type": "bool", "required": False, "default": True},
+    "focus_if_running": {"type": "bool", "required": False, "default": True},
+}
 
+TERMINATE_APP_SCHEMA = {
+    "app_name": {"type": "str", "required": True, "description": "Name of the application to launch" },
+    "pid"     : {"type": "int", "required": True}
+}
+
+def terminate_app_validate(params: Dict[str, Any])-> Tuple[bool, Optional[str]]:
+        has_app_name = 'app_name' in params
+        has_pid = 'pid' in params
+
+        if not has_app_name and not has_pid:
+            return(False, "Missing required parameters: 'app_name' or 'pid'")
+        
+        if has_app_name:
+            app_name = params['app_name']
+            if app_name is None or str(app_name).strip() == "":
+                return (False, "Parameter 'app_name' cannot be empty")
+        
+        if has_pid:
+            try:
+                pid = int(params['pid'])
+                if pid <=0:
+                    return ( False, "Parameter 'pid' must be positive")
+            except( ValueError, TypeError):
+                return (False, "Parameter 'pid' bust be a valid integer'")
+        return (True, None)
+
+def terminate_app_execute(params: Dict[str,Any], context: ExecutionContext)-> ActionResult:
+    try:
+            process_manager = get_process_manager()
+            pid = params.get('pid')
+            app_name = params.get('app_name')
+
+            if pid is not None:
+                try:
+                    pid = int(pid)
+                    if context.current_window and context.current_window.pid == pid:
+                        context.set_current_window(None)
+                        
+                    process = process_manager.get_process_by_pid(pid)
+                    process_name = process.name if process else "unknown"
+
+                    if process_manager.terminate(pid):
+                        return ActionResult(
+                            success=True, 
+                            data={'terminated_by': 'pid', 'pid': pid, 'process_name': process_name}, 
+                            method_used='process_manager'
+                        )
+                    else:
+                        return ActionResult(
+                            success=False, 
+                            error=f"Failed to terminate process {pid}", 
+                            method_used="process_manager"
+                        )
+                except ValueError:
+                    pass
+
+            if app_name:
+                app_name = str(app_name).strip()
+                
+                if not process_manager.is_running(app_name):
+                    return ActionResult(
+                        success=True,
+                        data={
+                            'terminated_by': 'app_name',
+                            'app_name': app_name,
+                            'already_not_running': True,
+                            'count': 0
+                        },
+                        method_used='process_manager'
+                    )
+
+                should_clear_window = False
+                if context.current_window:
+                    current_process = context.current_window.process_name.lower()
+                    target_app = app_name.lower()
+                    
+                    if target_app in current_process:
+                        should_clear_window = True
+
+                terminated_count = process_manager.terminate_by_name(app_name)
+                
+                if terminated_count > 0:
+                    if should_clear_window:
+                        context.set_current_window(None)
+                    
+                    return ActionResult(
+                        success=True,
+                        data={
+                            'terminated_by': "app_name",
+                            'app_name': app_name,
+                            'count': terminated_count
+                        },
+                        method_used='process_manager'
+                    )
+                else:
+                    return ActionResult(
+                        success=False,
+                        error=f"Failed to terminate app: {app_name}",
+                        method_used="process_manager"
+                    )
+
+            return ActionResult(
+                success=False, 
+                error=f"No valid target (pid or app_name) provided", 
+                method_used="process_manager"
+            )
+
+    except Exception as e:
+        return ActionResult(
+            success=False,
+            error=f"Exception terminating app: {str(e)}",
+            method_used="process_manager"
+        )
+    
+def terminate_app_verify(params: Dict[str, Any], context: ExecutionContext, result: ActionResult)-> VerifyResult:
+    time.sleep(0.5)
+    if result.data and result.data.get("already_not_running"):
+        return VerifyResult(
+            verified=True,
+            confidence=0.95,
+            reason="App was already not running"
+        )
+    time.sleep(0.3)
+    process_manager = get_process_manager()
+    try:
+        app_name = None
+        pid = None
+        if result.data:
+            app_name = result.data.get("app_name")
+            pid = result.data.get("pid")
+        if not app_name and not pid:
+            app_name = params.get("app_name")
+            pid = params.get("pid")
+        
+        if pid:
+            process = process_manager.get_process_by_pid(int(pid))
+            if process is None:
+                return VerifyResult(
+                    verified=True,
+                    confidence=0.95,
+                    reason=f"Process {pid} no longer exists"
+                )
+            else:
+                return VerifyResult(
+                    verified=False,
+                    confidence=0.90,
+                    reason=f"Process {pid} still running"
+                )
+        
+        if app_name:
+            is_running = process_manager.is_running(app_name)
+            if not is_running:
+                return VerifyResult(
+                    verified=True,
+                    confidence=0.95,
+                    reason=f"App '{app_name}' is no longer running"
+                )
+            else:
+                return VerifyResult(
+                    verified=False,
+                    confidence=0.90,
+                    reason=f"App '{app_name}' is still running"
+                )
+        return VerifyResult(
+            verified=False,
+            confidence=0.5,
+            reason="No app_name or pid to verify"
+        )
+    except Exception as e:
+        return VerifyResult(
+            verified=False,
+            confidence=0.5,
+            reason = f"Verification error: {str(e)}"
+        )
+"""
 class TerminateAppHandler(ActionHandler):
+
     @property
     def action_name(self)->str:
         return 'terminate_app'
@@ -344,14 +669,41 @@ class TerminateAppHandler(ActionHandler):
                 confidence=0.5,
                 reason = f"Verification error: {str(e)}"
             )
-    
+
+
 APP_HANDLERS = [
-    LaunchAppHandler,
-    TerminateAppHandler
+    #LaunchAppHandler,
+    # TerminateAppHandler 
 ]
+
 
 def get_app_handlers()->list:
     return [handler_class() for handler_class in APP_HANDLERS]
+
+"""
+
+def register_app_tools(executor):
+    """Register all app-domain tools with the executor."""
+    executor.register(
+        name="launch_app",
+        impl=launch_app_execute,
+        domain="app",
+        schema=LAUNCH_APP_SCHEMA,
+        validate_fn=launch_app_validate,
+        verify_fn=launch_app_verify,
+        cost=3,
+        description="Launch an application or focus it if already running",
+    )
+    executor.register(
+        name="terminate_app",
+        impl=terminate_app_execute,
+        domain="app",
+        schema=TERMINATE_APP_SCHEMA,
+        validate_fn=terminate_app_validate,
+        verify_fn=terminate_app_verify,
+        cost=2,
+        description="Terminate a running application by name or PID",
+    )
 
 if __name__ == "__main__":                                                
     """                                                                   

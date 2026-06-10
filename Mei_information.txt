@@ -1,0 +1,564 @@
+1. Mei/core/__init__.py
+Empty file — marks the core directory as a Python package.
+2. Mei/core/config.py (19 132 bytes, ~506 lines)
+Purpose
+Central configuration hub. Loads all tunable parameters and model paths from a YAML file (defaulting to config.yaml), or falls back to hard-coded defaults if no file exists. Exposes a singleton _CONFIG dict through get_config() / init_config().
+
+Key functions
+Function	Description
+init_config(path)	Reads YAML, merges with defaults, stores in _CONFIG. Creates a default YAML if none found.
+get_config()	Returns the current config dict (initializes on first call).
+Config sections & notable defaults
+Section	Key parameters
+audio	energy_threshold: 300, sample_rate: 16000, silence_duration: 0.8, min_speech_duration: 0.3, prefix_duration: 0.3
+whisper	model_size: "base", language: "en", device: "cpu", compute_type: "int8", model_path → models/whisper-model
+llm	model_path → models/qwen2.5-3b-instruct-q4_k_m.gguf, n_ctx: 32768, n_gpu_layers: -1, temperature: 0.4, max_tokens: 4096
+nlu	confidence_threshold: 0.65
+execution	timeout: 30, log_dir: "logs", require_confirmation: false, max_retries: 3, retry_delay: 1.0
+memory	db_path: "data/memory.db", max_context_messages: 20, auto_summarize_threshold: 50
+screen	capture_interval: 1.0, ocr_enabled: false, element_detection: true
+vision	omniparser.weights_dir, omniparser.som_model, omniparser.caption_model_name, etc.
+accessibility	prefer_accessibility: true, fallback_to_vision: true, cache_ttl: 5, max_depth: 25
+planning	max_steps: 15, use_accessibility: true, use_vision: false, require_confirmation: true
+teaching	enabled: true, learning_rate: 0.1, min_confidence: 0.3, max_patterns: 1000
+Relationships
+Consumed by virtually every other module: audio, LLM engine, NLU, planner, memory, visual, etc.
+3. Mei/core/events.py (6 787 bytes, ~194 lines)
+Purpose
+In-process publish/subscribe event system. Provides the backbone for loose coupling: any module can fire or listen for events without importing the others.
+
+Key classes & enums
+Symbol	Type	Description
+EventType	Enum	Defines 21 event types grouped into: Audio (SPEECH_STARTED, SPEECH_ENDED, TRANSCRIBE_COMPLETED), NLU (INTENT_CLASSIFIED), Execution (EXECUTION_STARTED, EXECUTION_COMPLETED, EXECUTION_FAILED), Pipeline (PIPELINE_STARTED, PIPELINE_COMPLETED), UI / Screen (SCREEN_CAPTURED, ELEMENT_DETECTED), Memory (MEMORY_STORED, MEMORY_RECALLED, CONTEXT_UPDATED), Planning (PLAN_CREATED, STEP_STARTED, STEP_COMPLETED, STEP_FAILED, PLAN_COMPLETED), System (STATE_CHANGED, ERROR)
+Event	dataclass	Holds type, data (dict), source (str), timestamp
+Key functions
+Function	Description
+subscribe(event_type, callback)	Registers a listener for a given EventType.
+publish(event_type, data, source)	Creates an Event and invokes every subscribed callback (errors are caught and printed).
+unsubscribe(event_type, callback)	Removes a listener.
+clear_subscribers()	Removes all listeners (used in tests).
+Implementation detail
+Uses a module-level defaultdict(list) — _subscribers — guarded by a threading.Lock for thread safety.
+4. Mei/core/pipeline.py (6 451 bytes, ~209 lines)
+Purpose
+Top-level orchestration pipeline. Ties together NLU → Planning → Execution for both voice and text inputs.
+
+Key functions
+Function	Description
+start_pipeline()	Subscribes _handle_transcription to TRANSCRIBE_COMPLETED events and publishes PIPELINE_STARTED.
+stop_pipeline()	Unsubscribes the handler and publishes PIPELINE_COMPLETED.
+process_text(text)	Public API — runs a text string through the full NLU → plan → execute cycle; called by both the speech callback and the typed-input path.
+_handle_transcription(event)	Extracts transcribed text from the event and delegates to process_text.
+_classify_and_execute(text)	1. Classifies intent via IntentClassifier.classify(). 2. If intent is "complex" or multi-step → invokes TaskPlanner.plan_and_execute(). 3. Otherwise → calls Executor.execute() directly. 4. Records outcomes in working memory via record_interaction().
+_execute_plan(plan, original_text)	Iterates over planner steps, executes each, handles retries, publishes step events.
+Relationships
+Imports from cognition.nlu.intent, cognition.planning.planner, action.executor, memory.working.
+5. Mei/core/state.py (3 873 bytes, ~139 lines)
+Purpose
+Global application-state singleton tracking what Mei is currently doing.
+
+Key classes
+Class	Description
+AppState	Enum with 7 states: IDLE, LISTENING, PROCESSING, EXECUTING, PLANNING, WAITING_CONFIRMATION, ERROR.
+StateManager	Singleton class. Stores current state, provides set_state(), get_state(), is_busy(). State transitions publish STATE_CHANGED events. Also maintains a state history deque (last 50 transitions).
+Key function
+get_state_manager() — module-level accessor for the singleton.
+6. Mei/core/task.py (19 985 bytes, ~578 lines)
+Purpose
+Defines the task representation and a task manager for tracking multi-step plans.
+
+Key classes
+Class	Description
+TaskStatus	Enum: PENDING, IN_PROGRESS, COMPLETED, FAILED, CANCELLED, WAITING_INPUT.
+TaskStep	Dataclass representing one action inside a task: action, params, status, result, error, retries, started_at, completed_at.
+Task	Full task object: id, description, steps: list[TaskStep], status, context, created_at, completed_at, metadata. Provides helpers like current_step(), advance(), fail_current_step(), complete(), progress property.
+TaskManager	Singleton that manages a dictionary of active tasks plus a completed_tasks deque. Provides create_task(), get_task(), complete_task(), fail_task(), get_active_tasks(), get_task_summary().
+Cross-cutting observations
+Singleton pattern is used throughout (config, StateManager, TaskManager).
+Publish/subscribe is the primary inter-module communication mechanism.
+Thread safety is considered (Lock on event bus, Lock on StateManager).
+[From subagent 2cbe4c03-0146-4409-bafd-423a99fa5c48 (Perception Module Researcher)] Here is a detailed summary of every source file in the Mei perception module:
+
+1. Mei/perception/__init__.py
+Empty file — marks the perception directory as a Python package.
+2. Mei/perception/audio/__init__.py
+Empty file — marks the audio directory as a Python package.
+3. Mei/perception/Visual/__init__.py
+Empty file — marks the Visual directory as a Python package.
+4. Mei/perception/System/__init__.py
+Empty file — marks the System directory as a Python package.
+5. Mei/perception/audio/listener.py (4 497 bytes, ~144 lines)
+Purpose
+Real-time microphone listener that detects speech onset/offset using energy-based Voice Activity Detection (VAD) and emits events.
+
+Key class: AudioListener
+Method	Description
+__init__()	Loads audio config (sample rate, energy threshold, silence/speech durations, prefix), initializes sounddevice.InputStream.
+start() / stop()	Starts/stops the background audio stream.
+_audio_callback(indata, frames, time, status)	Called per audio chunk. Calculates RMS energy, compares to threshold. If speaking: accumulates audio + publishes SPEECH_STARTED on transition. If silent after speech: accumulates silence; once silence exceeds silence_duration → trims trailing silence, publishes SPEECH_ENDED with the audio bytes.
+Notable details
+Uses a ring-buffer (collections.deque) for a short "prefix" of audio before speech starts — avoids clipping the beginning of utterances.
+Audio format: int16, mono, 16 kHz.
+Publishes events: SPEECH_STARTED, SPEECH_ENDED.
+6. Mei/perception/audio/transcriber.py (3 789 bytes, ~116 lines)
+Purpose
+Speech-to-text engine using faster-whisper (CTranslate2-based Whisper). Subscribes to SPEECH_ENDED events, runs Whisper inference, emits TRANSCRIBE_COMPLETED.
+
+Key class: Transcriber
+Method	Description
+__init__()	Loads whisper config (model size, language, device, compute type, beam size). Initializes faster_whisper.WhisperModel.
+start()	Subscribes to SPEECH_ENDED, starts a background threading.Thread running _process_loop().
+stop()	Sets running = False, unsubscribes, joins thread.
+_on_speech_ended(event)	Puts audio bytes onto self.queue.
+_process_loop()	Drains the queue; for each audio blob: converts bytes → float32 numpy array, calls self.model.transcribe(), filters out empty/hallucinated text (e.g. "(music)", "[BLANK_AUDIO]"), publishes TRANSCRIBE_COMPLETED.
+Notable details
+Model path defaults to models/whisper-model.
+Applies vad_filter=True for Whisper's internal VAD.
+Transcription runs on a separate thread to keep the audio callback non-blocking.
+7. Mei/perception/audio/testing_listener.py (2 414 bytes)
+Purpose
+Standalone test script for the AudioListener. Subscribes to SPEECH_STARTED/SPEECH_ENDED/ERROR events, prints diagnostics, runs for 30 seconds, then cleans up.
+
+8. Mei/perception/audio/testing_transcriber.py (4 300 bytes)
+Purpose
+Standalone test script for the full listener → transcriber pipeline. Starts both components, prints transcription results for 60 seconds, then cleans up.
+
+9. Mei/perception/Visual/screen.py (15 328 bytes, ~424 lines)
+Purpose
+Captures screenshots and builds a structured understanding of on-screen UI elements using a tiered approach: first tries the Windows UI Automation accessibility tree, then falls back to OmniParser (a visual ML model) if accessibility data is insufficient.
+
+Key class: ScreenAnalyzer
+Method	Description
+__init__()	Loads screen/vision config, optionally initializes OmniParser.
+capture()	Takes a screenshot via mss, returns a PIL Image.
+analyze(image)	Tries accessibility-first analysis, falls back to vision analysis. Returns a dict of labeled UI elements.
+_analyze_with_accessibility(image)	Calls AccessibilityAnalyzer.get_ui_elements(), converts to a unified element format.
+_analyze_with_vision(image)	Runs OmniParser's process_image(), converts parsed labels/boxes to elements.
+get_element_at(x, y)	Returns the UI element at given screen coordinates.
+find_element_by_text(text)	Searches current elements for a text match.
+get_current_view()	Full snapshot: captures + analyzes, returns {image, elements, timestamp, app_context}.
+Notable details
+Caches analysis results; re-analyzes only after capture_interval seconds.
+Publishes SCREEN_CAPTURED and ELEMENT_DETECTED events.
+Elements have a unified shape: {type, text, bbox, confidence, properties}.
+10. Mei/perception/Visual/analyzer.py (17 843 bytes, ~465 lines)
+Purpose
+Wraps the OmniParser visual model for pure vision-based UI element detection. Handles model loading, image pre-processing, bounding-box extraction, OCR, and icon captioning.
+
+Key class: OmniParserAnalyzer
+Method	Description
+__init__()	Loads OmniParser weights (SOM model for icon detection, YOLO/Florence for captioning).
+process_image(image)	Full pipeline: screenshot → resize → run YOLO icon detector → run OCR (EasyOCR) → merge detections → return structured {elements, image_size, annotated_image}.
+_detect_icons(image)	Runs the YOLO-based SOM model, returns bounding boxes + confidence.
+_run_ocr(image)	Uses EasyOCR to extract text regions.
+_merge_detections(icons, text_regions)	Deduplicates overlapping icon/text detections, assigns text to nearby icons.
+_caption_icon(image, bbox)	Optionally runs a Florence-2 caption model on icon crops for richer descriptions.
+Notable details
+OmniParser is a Git submodule (Mei/perception/Visual/OmniParser).
+Heavy model; only loaded when use_vision: true in planning config or accessibility fallback is needed.
+11. Mei/perception/System/process.py (6 513 bytes, ~181 lines)
+Purpose
+Enumerates running processes on Windows. Provides helpers to find processes by name, get foreground app info, and check whether a process is running.
+
+Key class: ProcessMonitor
+Method	Description
+get_running_processes()	Uses psutil to list all processes with name, pid, status, memory.
+get_foreground_app()	Calls win32gui.GetForegroundWindow(), then psutil.Process(pid) to identify the active app.
+find_process(name)	Searches running processes by substring match.
+is_running(name)	Boolean check.
+get_process_info(pid)	Detailed info for a single PID: CPU%, memory, threads, create time.
+12. Mei/perception/System/windows.py (13 724 bytes, ~397 lines)
+Purpose
+Discovers, queries, and manipulates desktop windows via Win32 and UI Automation APIs.
+
+Key class: WindowManager
+Method	Description
+get_all_windows()	Enumerates all visible top-level windows, returns list of {hwnd, title, class_name, pid, rect, is_foreground}.
+get_foreground_window()	Returns info about the currently focused window.
+find_windows(title)	Searches by title substring.
+focus_window(hwnd)	Brings a window to the foreground.
+minimize/maximize/restore/close_window(hwnd)	Standard window operations.
+move_window(hwnd, x, y, w, h)	Repositions/resizes a window.
+get_window_text(hwnd)	Extracts all visible text from a window's child controls.
+snap_window(hwnd, direction)	Snaps a window to left/right/top/bottom half or corners (implements Windows Snap).
+arrange_windows(layout)	Arranges multiple windows in tiled, stacked, or side-by-side layouts.
+13. Mei/perception/System/accessibility.py (19 995 bytes, ~530 lines)
+Purpose
+Extracts a structured accessibility tree from any window using Windows UI Automation (comtypes.client / UIAutomationCore). This is the primary mechanism for understanding UI content without screenshots.
+
+Key class: AccessibilityAnalyzer
+Method	Description
+get_ui_elements(hwnd)	Walks the UI Automation tree up to max_depth levels, returns a list of element dicts.
+find_element(hwnd, name=, role=, automationid=)	Searches the tree with AND-matching on multiple criteria.
+get_element_value(element)	Reads ValuePattern / TextPattern / SelectionPattern to extract current value.
+get_element_actions(element)	Lists available UIA patterns (Invoke, Toggle, ExpandCollapse, etc.) → maps to action names.
+click_element(element)	Invokes InvokePattern or clicks the element's clickable point.
+set_element_value(element, value)	Sets text via ValuePattern or SendKeys fallback.
+get_element_at_point(x, y)	Uses IUIAutomation.ElementFromPoint.
+Notable details
+Caches results per (hwnd, depth) with configurable TTL (default 5 s).
+Maps UIA ControlType IDs to human-readable names (Button, Edit, ComboBox, etc.).
+Implements a depth-limited BFS traversal with cycle detection.
+14. Mei/perception/System/applibrary.py (13 417 bytes, ~347 lines)
+Purpose
+Knows how to find and launch applications on Windows. Searches the Start Menu, PATH, registry (App Paths + Uninstall keys), and a bundled known_apps.csv database of common applications.
+
+Key class: AppLibrary
+Method	Description
+find_app(name)	Master search: first checks known_apps.csv, then Start Menu shortcuts, then registry, then PATH. Returns {name, path, source} or None.
+launch_app(name)	Finds the app and launches it via subprocess.Popen. Special-case: UWP/Store apps opened via shell:AppsFolder protocol.
+get_installed_apps()	Aggregates Start Menu + Registry entries into a unified list.
+search_apps(query)	Fuzzy search over installed apps.
+_search_known_apps(name)	Looks up known_apps.csv — a CSV with columns name, executable, common_names, category.
+_search_start_menu(name)	Scans .lnk files in Start Menu directories.
+_search_registry(name)	Queries HKLM\...\App Paths and Uninstall keys.
+_search_path(name)	Searches %PATH% for executables.
+Cross-module observations
+Accessibility-first, vision-fallback is the design philosophy: UI Automation is fast and text-accurate; OmniParser is the heavy-weight fallback for apps with poor accessibility support.
+All perception modules publish events via the core event bus; they don't call into cognition or action directly.
+Audio capture is streaming (sounddevice callback) while visual capture is on-demand (captured when requested by the planner or executor).
+[From subagent 79af45b0-0941-4029-8e42-e8d8d98abbde (Cognition Module Researcher)] Here is a detailed summary of every source file in the Mei cognition module:
+
+1. Mei/cognition/llm/engine.py (6 191 bytes, ~183 lines)
+Purpose
+Wraps a local LLM (loaded via llama-cpp-python) behind a simple singleton API. Every module that needs language generation calls through this engine.
+
+Key class: LLMEngine
+Method	Description
+__init__()	Loads LLM config from get_config()['llm']. Initializes llama_cpp.Llama with the GGUF model path, n_ctx, n_gpu_layers, n_threads, verbose=False.
+generate(prompt, system_prompt, max_tokens, temperature, stop)	Builds a chat-completion request ([{system, user}] messages), calls self.model.create_chat_completion(), returns the generated text string.
+generate_with_context(prompt, context_messages, system_prompt, ...)	Same but prepends a list of prior messages (for multi-turn context).
+generate_json(prompt, system_prompt, ...)	Calls generate() then attempts json.loads() on the result. If JSON parsing fails, tries to extract a JSON block from the text with regex. Returns a Python dict/list or None.
+Singleton accessor
+get_llm_engine() — module-level function returning the single LLMEngine instance.
+Notable details
+Model: qwen2.5-3b-instruct-q4_k_m.gguf (~2 GB, quantized).
+Default context window: 32 768 tokens.
+GPU offloading is on by default (n_gpu_layers: -1).
+generate_json() is critical — used by both the NLU intent classifier and the planner to get structured output from the LLM.
+2. Mei/cognition/nlu/intent.py (10 515 bytes, ~302 lines)
+Purpose
+Natural Language Understanding — classifies user input into structured intents with parameters. Uses a two-stage approach: first tries rule-based pattern matching, then falls back to the LLM for ambiguous inputs.
+
+Key class: IntentClassifier
+Method	Description
+__init__()	Loads NLU config, builds pattern table.
+classify(text)	Master method. 1) Runs _pattern_match(text) for fast rule-based classification. 2) If no match or confidence is below threshold → calls _llm_classify(text). 3) Publishes INTENT_CLASSIFIED event. Returns {intent, confidence, params, raw_text, method}.
+_pattern_match(text)	Iterates over a table of compiled regex patterns mapped to intent names and parameter extractors. Returns on first match with confidence 0.9.
+_llm_classify(text)	Sends the user text to the LLM with a structured system prompt that lists all known intents and expected JSON output format. Parses JSON response. Confidence set to 0.75.
+_build_patterns()	Returns a list of (compiled_regex, intent_name, param_extractor_fn) tuples.
+Known intents (26 total)
+Grouped into categories:
+
+Category	Intents
+App management	open_app, close_app, switch_app, list_apps
+Window management	minimize_window, maximize_window, restore_window, snap_window, arrange_windows, move_window, resize_window
+Input	type_text, click_element, press_key, scroll
+Navigation	go_to_url, search_web, navigate_to
+Utility	take_screenshot, get_time, get_date, set_timer, set_reminder
+System	system_info, help
+Meta	complex_task (catch-all for multi-step or ambiguous requests)
+Pattern examples
+r"(?:open|launch|start|run)\s+(.+)" → open_app with params.app_name
+r"(?:type|enter|write|input)\s+(.+)" → type_text with params.text
+r"(?:go to|navigate to|open)\s+(https?://\S+)" → go_to_url with params.url
+3. Mei/cognition/planning/planner.py (21 976 bytes, ~597 lines)
+Purpose
+Multi-step task planner. Takes a complex or ambiguous user request and breaks it into an ordered list of executable steps. Supports plan generation via the LLM, plan validation, and step-by-step execution with re-planning on failure.
+
+Key class: TaskPlanner
+Method	Description
+__init__()	Loads planning config, initializes LLMEngine, Executor, ScreenAnalyzer references.
+plan_and_execute(text, context)	Top-level entry: generates a plan → validates → executes steps sequentially → returns final result.
+_generate_plan(text, context)	Builds a detailed system prompt describing available actions + current screen context + accessibility info. Calls llm.generate_json() to get a plan as a JSON list of steps. Each step: {action, params, description, wait_after}.
+_validate_plan(plan)	Checks that each step has a known action, required params exist, and the plan isn't too long (capped at max_steps, default 15).
+_execute_plan(plan, original_text)	Iterates through steps: sets state to EXECUTING, calls executor.execute(), publishes step events, handles failures with retries and optional re-planning.
+_replan(remaining_steps, last_error, original_text)	If a step fails, sends the error + remaining steps back to the LLM to generate a revised plan.
+_build_screen_context()	Captures current screen state (foreground app, window title, UI elements via accessibility tree) to provide the LLM with situational awareness.
+System prompt for planning (embedded)
+A long, detailed prompt that:
+
+Tells the LLM it is "Mei, an AI assistant that controls a Windows computer."
+Lists all available actions with parameter schemas.
+Provides the current screen context (foreground app, visible elements).
+Instructs the LLM to output a JSON array of steps.
+Includes rules: "use accessibility IDs when available", "add waits after launching apps", "keep plans under 15 steps."
+Notable details
+Re-planning: if step execution fails, the planner can call the LLM again with error context to adjust the plan.
+Accessibility-aware: the planner reads UI Automation elements to give the LLM awareness of what's currently on screen.
+Step execution includes configurable wait_after delays to let apps settle.
+Cross-module observations
+The cognition layer never directly touches the OS — it generates structured data (intents, plans) that the action layer executes.
+All three cognition modules ultimately depend on the same LLM instance (Qwen 2.5 3B via llama-cpp-python).
+NLU → Planner handoff: when IntentClassifier returns complex_task, the pipeline invokes TaskPlanner.
+[From subagent 03c642c6-76db-4ddd-8792-baff3fe94c23 (Action Module Researcher)] Here is a detailed summary of every source file in the Mei action module:
+
+1. Mei/action/__init__.py (251 bytes)
+Content
+Imports and re-exports Executor, get_executor, and ExecutionContext. Acts as the public API surface for the action package.
+
+2. Mei/action/context.py (4 659 bytes, ~152 lines)
+Purpose
+Defines ExecutionContext — a container carrying all the runtime information a handler needs to execute an action.
+
+Key class: ExecutionContext
+Field	Description
+action	The action name string (e.g., "open_app").
+params	Dictionary of action parameters.
+foreground_window	Dict with current foreground window info (hwnd, title, class, pid).
+screen_elements	List of current UI elements (from accessibility or vision).
+working_memory	Reference to working memory for context retrieval.
+task	Optional reference to the parent Task object (for multi-step plans).
+timestamp	When the context was created.
+Factory method
+ExecutionContext.build(action, params) — static method that auto-populates foreground window, screen elements, and working memory references.
+3. Mei/action/executor.py (21 686 bytes, ~582 lines)
+Purpose
+Central command dispatcher. Maps action names to handler functions, builds execution context, invokes handlers, and manages logging/retries.
+
+Key class: Executor
+Method	Description
+__init__()	Loads execution config, calls _register_all_handlers().
+execute(intent_result)	Master entry point. Takes an intent dict {intent, params, ...}, builds ExecutionContext, looks up handler, calls it, wraps result. Publishes EXECUTION_STARTED/COMPLETED/FAILED events.
+_register_all_handlers()	Imports and registers handlers from all handler modules (app, window, input, navigation, utility).
+register(action_name, handler_fn)	Adds a handler to the _handlers dict.
+_execute_with_retry(handler, context)	Calls handler with configurable retries (max_retries, retry_delay).
+Handler registration
+Handlers are plain functions with signature def handler(context: ExecutionContext) -> dict. The executor maps action names (strings) to these functions. Example registrations:
+
+"open_app" → app.handle_open_app
+"type_text" → input.handle_type_text
+"snap_window" → window.handle_snap_window
+Notable details
+Results are wrapped in {success: bool, result: ..., error: ..., action, params, duration}.
+All executions are logged via ExecutionLogger.
+Thread-safe: uses locks around handler registration.
+4. Mei/action/handlers/__init__.py (883 bytes)
+Content
+Imports all handler modules and re-exports them, plus defines a register_all_handlers(executor) function that registers every handler.
+
+5. Mei/action/handlers/app.py (29 458 bytes, ~783 lines)
+Purpose
+Handles application lifecycle actions: opening, closing, switching, listing, and managing apps.
+
+Key handlers
+Handler	Action	Description
+handle_open_app	open_app	Uses AppLibrary.find_app() + subprocess.Popen. Handles special cases: UWP apps, web browsers, specific app arguments. Waits for app window to appear.
+handle_close_app	close_app	Finds the app's process/window, tries graceful close (WM_CLOSE), falls back to process.terminate().
+handle_switch_app	switch_app	Finds the app's window and brings it to foreground via WindowManager.focus_window().
+handle_list_apps	list_apps	Combines running process list with window list to show currently active apps.
+handle_open_file	open_file	Opens a file with its default application via os.startfile().
+handle_open_url	open_url	Opens a URL in the default browser via webbrowser.open().
+Notable details
+Has special-case logic for apps like Chrome, VS Code, Steam, Discord.
+Implements a "wait for window" loop with timeout after launching an app.
+Handles both desktop apps and UWP (Microsoft Store) apps.
+6. Mei/action/handlers/input.py (24 800 bytes, ~676 lines)
+Purpose
+Handles keyboard and mouse input simulation.
+
+Key handlers
+Handler	Action	Description
+handle_type_text	type_text	Types text character-by-character or via clipboard paste (for speed/Unicode). First tries to find and focus a text field via accessibility, then types.
+handle_click_element	click_element	Finds a UI element by text/name/automationId, gets its clickable point, performs win32api mouse click. Supports left/right/double click.
+handle_press_key	press_key	Simulates key presses including modifiers (Ctrl, Alt, Shift, Win). Handles combos like "ctrl+c". Uses win32api.keybd_event.
+handle_scroll	scroll	Simulates mouse scroll wheel in a given direction and amount.
+handle_drag_drop	drag_drop	Simulates drag from (x1,y1) to (x2,y2) with configurable speed.
+handle_select_text	select_text	Clicks at start position, shift-clicks at end to select text.
+Notable details
+Text typing prefers clipboard paste (Ctrl+V) for strings > 10 chars to avoid character-by-character slowness.
+Uses SendInput via ctypes for robust key simulation.
+Element finding uses the AccessibilityAnalyzer to locate elements by text, then clicks their center point.
+7. Mei/action/handlers/navigation.py (6 475 bytes, ~185 lines)
+Purpose
+Handles web navigation actions.
+
+Key handlers
+Handler	Action	Description
+handle_go_to_url	go_to_url	Opens a URL: if a browser is focused, types into the address bar (Ctrl+L, type URL, Enter); otherwise opens via webbrowser.open().
+handle_search_web	search_web	Opens a Google search for the given query in the default browser.
+handle_navigate_to	navigate_to	Generic navigation — determines if target is a URL, file path, or in-app location and routes appropriately.
+8. Mei/action/handlers/utility.py (10 563 bytes, ~308 lines)
+Purpose
+Handles utility/informational actions.
+
+Key handlers
+Handler	Action	Description
+handle_take_screenshot	take_screenshot	Captures the screen via mss, saves to data/screenshots/, returns the file path.
+handle_get_time	get_time	Returns current system time in a formatted string.
+handle_get_date	get_date	Returns current date.
+handle_system_info	system_info	Collects CPU, memory, disk, OS info via psutil and platform.
+handle_set_timer	set_timer	Sets a timer using threading.Timer that prints a notification.
+handle_set_reminder	set_reminder	Similar to timer but with a custom message.
+handle_help	help	Returns a list of all available commands and their descriptions.
+9. Mei/action/handlers/window.py (38 692 bytes, ~1036 lines)
+Purpose
+Handles window management actions. The largest handler file — full window manipulation via Win32 API.
+
+Key handlers
+Handler	Action	Description
+handle_minimize_window	minimize_window	Minimizes the target or foreground window.
+handle_maximize_window	maximize_window	Maximizes the target or foreground window.
+handle_restore_window	restore_window	Restores a minimized/maximized window.
+handle_close_window	close_window	Closes a window via WM_CLOSE.
+handle_snap_window	snap_window	Snaps a window to screen edges/corners (left, right, top, bottom, top-left, etc.). Calculates positions based on monitor geometry via win32api.GetMonitorInfo.
+handle_arrange_windows	arrange_windows	Arranges multiple windows: tiled, stacked, side-by-side, grid. Calculates layout positions for N windows.
+handle_move_window	move_window	Moves a window to absolute or relative coordinates.
+handle_resize_window	resize_window	Resizes a window to specified or relative dimensions.
+handle_focus_window	focus_window	Brings a window to the foreground.
+handle_list_windows	list_windows	Lists all visible windows with details.
+handle_cascade_windows	cascade_windows	Cascades all windows in a staircase pattern.
+handle_show_desktop	show_desktop	Minimizes all windows (simulates Win+D).
+Notable details
+Window finding supports fuzzy title matching.
+Multi-monitor aware — uses win32api.EnumDisplayMonitors and GetMonitorInfo.
+Handles DPI-awareness issues on high-DPI screens.
+Extensive error handling for common Win32 failures (window not found, access denied).
+10. Mei/action/debug/__init__.py (114 bytes)
+Content
+Imports and re-exports ExecutionLogger and get_logger.
+
+11. Mei/action/debug/logger.py (10 036 bytes, ~292 lines)
+Purpose
+Structured execution logger. Records every action execution to JSON files and provides query/analysis capabilities.
+
+Key class: ExecutionLogger
+Method	Description
+log_execution(context, result, duration)	Writes a JSON log entry: {timestamp, action, params, success, result/error, duration, foreground_window}. Saves to logs/execution_YYYYMMDD_HHMMSS.json.
+get_recent_logs(n)	Returns the last N log files, parsed as dicts.
+get_logs_for_action(action)	Filters logs by action name.
+get_success_rate(action)	Calculates success rate for a given action.
+get_average_duration(action)	Calculates average execution time.
+get_summary()	Returns aggregate stats: total executions, success rate, most common actions, average durations.
+Notable details
+Log directory defaults to logs/.
+Each execution creates a separate JSON file (not appended to a single file).
+Provides analytics to help debug and improve handler reliability.
+Cross-module observations
+Handler pattern: all handlers follow the same signature fn(context: ExecutionContext) -> dict(success, result/error).
+The executor is the sole gateway between cognition outputs and OS manipulation.
+The action module is the only layer that touches the OS (Win32 API, subprocess, keyboard/mouse simulation).
+[From subagent 64705510-9bb3-4985-b3f7-a6e12be391ac (Memory Module Researcher)] Here is a detailed summary of the Mei memory module and the understanding module, plus the root-level utility files:
+
+1. Mei/memory/schema.py (27 225 bytes, ~659 lines)
+Purpose
+Defines the SQLite database schema and migration system for Mei's persistent memory. Creates all tables, indexes, triggers, and views.
+
+Key function: initialize_database(db_path)
+Creates or migrates the database with these tables:
+
+Table	Purpose	Key columns
+conversations	Stores conversation sessions	id, started_at, ended_at, summary, message_count, topic
+messages	Individual messages within conversations	id, conversation_id, role (user/assistant/system), content, timestamp, intent, intent_confidence, tokens_used
+interactions	Records each user→Mei interaction cycle	id, conversation_id, user_input, intent, action_taken, result, success, error, timestamp, duration, context_snapshot
+app_usage	Tracks application usage statistics	app_name, open_count, total_duration, last_used, first_used, avg_session_duration
+user_preferences	Key-value store for user preferences	key, value, learned_from, confidence, times_confirmed, last_updated
+command_patterns	Learned command shortcuts	pattern, intent, params_template, success_count, fail_count, confidence, source
+error_log	Persistent error records	action, error_type, error_message, context, resolution, timestamp
+context_cache	Short-lived context cache	key, value, expires_at, created_at
+episodic_memory	Rich event memories	id, event_type, description, context, outcome, emotional_valence, importance, recall_count, embedding
+skills	Learned/taught skills	name, description, steps, success_rate, times_used, taught_by, verified
+entities	Named entities Mei has learned about	name, entity_type, properties, relationships, first_mentioned, mention_count
+Notable details
+Schema versioning: a schema_version table tracks the current version; _run_migrations() applies incremental upgrades.
+Indexes: comprehensive covering indexes on foreign keys, timestamps, frequently queried columns.
+Views: v_recent_interactions (last 24h), v_app_stats (aggregated app usage), v_successful_patterns (high-confidence command patterns).
+Triggers: trg_update_message_count auto-increments conversations.message_count on new messages.
+2. Mei/memory/store.py (91 688 bytes, ~2 332 lines)
+Purpose
+The largest file in the project — the persistent memory data-access layer. Provides CRUD operations for every table defined in schema.py.
+
+Key class: MemoryStore
+Method group	Description
+Conversations	create_conversation(), end_conversation(), get_conversation(), get_recent_conversations(), update_conversation_summary()
+Messages	add_message(), get_messages(), get_recent_messages(), search_messages(query) — full-text search with LIKE
+Interactions	record_interaction(), get_recent_interactions(), get_interactions_by_intent(), get_interaction_stats()
+App usage	record_app_usage(), get_app_usage(), get_most_used_apps(), get_app_usage_summary()
+Preferences	set_preference(), get_preference(), get_all_preferences(), update_preference_confidence()
+Command patterns	record_command_pattern(), find_matching_pattern(), get_successful_patterns(), update_pattern_stats()
+Errors	record_error(), get_recent_errors(), get_errors_by_action(), find_error_resolution()
+Context cache	cache_context(), get_cached_context(), clear_expired_cache()
+Episodic memory	store_episode(), recall_episodes(), get_important_episodes(), update_episode_recall()
+Skills	add_skill(), get_skill(), update_skill_stats(), get_all_skills(), search_skills()
+Entities	add_entity(), get_entity(), update_entity(), search_entities(), get_entity_relationships()
+Analytics	get_daily_stats(), get_success_rate_by_action(), get_usage_trends(), get_memory_summary()
+Notable details
+Singleton via get_memory_store().
+All database access uses sqlite3 with parameterized queries.
+Implements _execute() and _execute_many() wrappers with error handling and connection management.
+Connection uses check_same_thread=False for multi-threaded access.
+JSON serialization for complex fields (context_snapshot, properties, steps).
+3. Mei/memory/working.py (45 947 bytes, ~1 191 lines)
+Purpose
+Working memory — the in-memory, fast-access layer that holds the current conversation context, recent interactions, and actively used data. Acts as a cache/bridge over the persistent MemoryStore.
+
+Key class: WorkingMemory
+Method group	Description
+Conversation	start_conversation(), end_conversation(), add_message(role, content, intent), get_recent_messages(n), get_conversation_context()
+Interaction recording	record_interaction(user_input, intent, action, result, success, error, duration) — writes to both working memory and persistent store.
+Context	get_context_for_llm() — builds a formatted context string for LLM prompts including recent messages, last actions, current app, user preferences. update_context(key, value) — sets ephemeral context values.
+App tracking	record_app_switch(app_name), get_current_app(), get_recent_apps()
+Preferences	learn_preference(key, value, source), get_preference(key), get_all_preferences()
+Command learning	learn_command(text, intent, params), find_learned_command(text) — remembers user→command mappings for faster future matches.
+Error tracking	record_error(action, error, context), find_error_resolution(action, error)
+Entity tracking	remember_entity(name, type, properties), recall_entity(name)
+Summarization	_maybe_summarize() — when message count exceeds auto_summarize_threshold, uses the LLM to generate a conversation summary and stores it.
+Notable details
+Singleton via get_working_memory().
+Maintains in-memory caches (_context, _recent_messages deque, _app_history deque) plus writes through to MemoryStore.
+The get_context_for_llm() method is critical — it's called by the planner and NLU to give the LLM situational awareness.
+Auto-summarization uses the LLM when conversations get long.
+4. Mei/memory/episodic.py (5 018 bytes, ~149 lines)
+Purpose
+Episodic memory — stores and retrieves significant events/experiences with importance scoring and emotional valence.
+
+Key class: EpisodicMemory
+Method	Description
+store(event_type, description, context, outcome, importance, emotional_valence)	Saves an episode to the database via MemoryStore.store_episode().
+recall(query, limit)	Searches episodic memory by keyword/description. Returns most relevant episodes.
+get_important(min_importance, limit)	Returns high-importance episodes (e.g., user corrections, successful complex tasks).
+record_success(description, context)	Convenience: stores a success episode with positive valence + high importance.
+record_failure(description, context, error)	Convenience: stores a failure episode with negative valence.
+record_learning(description, source)	Stores a learning/teaching event.
+Notable details
+Emotional valence is a float from -1.0 (negative) to 1.0 (positive).
+Importance is a float from 0.0 to 1.0.
+Recall count is incremented each time an episode is retrieved.
+5. Mei/understanding/teaching.py (9 809 bytes, ~280 lines)
+Purpose
+Allows users to teach Mei new commands and behaviors. Implements a simple learning system where user corrections and explicit teachings are stored and applied to future interactions.
+
+Key class: TeachingModule
+Method	Description
+teach_command(trigger, action, params, description)	Stores a new command mapping: "when user says X, do action Y with params Z". Saved as a skill and command pattern.
+correct_action(original_input, wrong_action, correct_action, correct_params)	Records a correction: user says the last action was wrong and provides the right one. Updates pattern confidence, stores episodic memory of the correction.
+suggest_from_history(text)	Looks at past successful interactions to suggest what action to take for similar input.
+get_learned_commands()	Returns all taught commands.
+apply_teaching(text)	Checks if the input matches any taught pattern; if so, returns the taught action + params. Called by the pipeline before NLU.
+_calculate_similarity(text1, text2)	Simple word-overlap similarity score for fuzzy matching taught triggers.
+Notable details
+Teaching is persisted through MemoryStore (skills + command_patterns tables).
+The teaching module can override normal NLU classification for taught patterns.
+Corrections are logged in episodic memory for future reference.
+6. check_memory.py (root level, 1 319 bytes)
+Purpose
+Standalone diagnostic script that connects to the SQLite database and dumps the contents of all tables. Useful for debugging what Mei has stored.
+
+Key behavior
+Opens data/memory.db.
+Queries sqlite_master for all table names.
+For each table: prints the first 5 rows and total row count.
+7. test.py (root level, 8 568 bytes)
+Purpose
+Integration test / demo script. Tests the visual perception pipeline (screenshot capture, OmniParser analysis, accessibility tree extraction).
+
+Key behavior
+Captures a screenshot using mss.
+Runs OmniParser analysis on the screenshot.
+Prints detected elements (bounding boxes, labels, types).
+Draws annotated bounding boxes on the screenshot and saves as test_annotated.png.
+Also tests the accessibility analyzer by extracting UI elements from the foreground window.
+Cross-module observations
+Three memory tiers: Working (in-memory, fast) → Persistent store (SQLite) → Episodic (long-term significant events).
+The memory system is designed for continuous learning: command patterns strengthen with use, preferences are tracked, errors are logged with resolutions.
+working.py and store.py together account for ~137 KB of code — memory is the most extensive subsystem.

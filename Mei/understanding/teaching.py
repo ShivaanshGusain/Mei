@@ -19,7 +19,7 @@ URL_PATTERN = re.compile(
 
 PATH_PATTERN = re.compile(
     r'^[A-Za-z]:\\|^\\\\|^/[^\s]',
-    re.IGNORECASE
+    re.IGNORECASE   
 )
 
 IP_PATTERN = re.compile(
