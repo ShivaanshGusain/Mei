@@ -1,6 +1,7 @@
 from ...core.config import get_config
 from ...core.events import emit, subscribe, EventType
 from ...core.task import Intent, Plan, Step, StepStatus
+from ...core.config import ReactStep, Observation
 from ..llm.engine import get_llm_engine
 from ...perception.System.windows import WindowManager
 from ...perception.System.process import ProcessManager
@@ -24,6 +25,48 @@ VALID_ACTIONS = {
     "wait",           
     "find_element"    
 }
+"""IN-PROGRESS————Addition to the planning module to support ReAct loop system
+   Follow up  ————Next in executor for Execution loop"""
+REACT_SYSTEM_PROMPT = """
+You are a ReAct agent for a Windows desktop automation assistant.
+Given the user's intent, current system state, and history of previous actions + observations,
+decide the NEXT SINGLE ACTION to take.
+
+THINK step-by-step:
+1. What has been done so far? (review history)
+2. What was the result of the last action? (review observation)
+3. What should I do next to achieve the user's goal?
+4. Is the goal already achieved? If yes, set done=true.
+
+AVAILABLE ACTIONS:
+{action_catalog}
+
+RESPONSE FORMAT (JSON only):
+{{
+    "thought": "Your step-by-step reasoning about what to do next",
+    "action": "action_name",
+    "parameters": {{...}},
+    "description": "What this step does for the user",
+    "done": false
+}}
+
+When the task is fully complete, respond:
+{{
+    "thought": "The goal has been achieved because...",
+    "action": "none",
+    "parameters": {{}},
+    "description": "Task complete",
+    "done": true
+}}
+
+RULES:
+1. ALWAYS provide a "thought" explaining your reasoning.
+2. Return EXACTLY ONE action per response.
+3. Use observations to adapt — if something failed, try a different approach.
+4. Set done=true ONLY when the user's original intent is fully satisfied.
+5. Maximum 10 steps per task to prevent infinite loops.
+
+"""
 
 PLANNER_SYSTEM_PROMPT = """
 You are a task planner for a Windows desktop automation assistant.
@@ -311,6 +354,166 @@ Response:
     ]
 }
 """
+
+class ReactPlanner:
+    MAX_STEPS = 15
+
+    def __init__(self, auto_subscribe: bool = True):
+        self._llm = get_llm_engine("planner")
+        self._window_manager = WindowManager()
+        self._process_manager = ProcessManager()
+
+        if auto_subscribe:
+            subscribe(EventType.INTENT_RECOGNIZED, self._on_intent)
+            subscribe(EventType.PLAN_FAILED, self._on_plan_failed)
+        
+    def next_step(self, intent: Intent, context: Dict[str,Any],
+                  history: List[ReactStep] = None)-> Optional[ReactStep]:
+        history = history or []
+
+        if len(history) > self.MAX_STEPS:
+            return ReactStep(
+                thought = "Maximum steps reached, stopping.",
+                action = "none", parameters={}, description="Max steps exceeded",
+                done = True
+            )
+        
+        prompt = self._build_prompt(intent,context, history)
+        messages = [{"role":"user","context":prompt}]
+
+        response = self._llm.chat_json(
+            messages=messages,
+            system_prompt=self._build_system_prompt(intent)
+        )
+
+        if not response:
+            return None
+        
+        return self._parse_react_response(response)
+    
+    def _build_react_prompt(self,intent: Intent, context: Dict[str,Any], history:List[ReactStep]):
+        intent_str = f"""
+        Action: {intent.action}
+Target: {intent.target}
+Parameters: {intent.parameters}
+Original command: "{intent.raw_command}"
+Complexity: {intent.complexity}
+Domain: {intent.domain}"""
+
+        context_str = self._format_context(context)
+
+        history_str = ""
+        
+        if history:
+            history_str = "HISTORY OF ACTOINS: \n"
+            for i, step in enumerate(history):
+                history_str +=f"\n--- Step {i+1} ---\n"
+                history_str +=f"Thought: {step.thought}\n"
+                history_str +=f"Action: {step.action}({step.parameters})\n"
+
+                if step.observation:
+                    obs = step.observation
+                    history_str +=f"Result: {'SUCCESS' if obs.success else 'FAILED'}\n"
+                    if obs.error:
+                        history_str +=f"Error: {obs.error}\n"
+                    if obs.result_data:
+                        preview = dict(list(obs.result_data.items())[:3])
+                        history_str +=f"Data: {preview}\n"
+                    if obs.foreground_window:
+                        history_str +=f"Current window: {obs.foreground_window}\n"
+        return f"{intent_str}\n\n{context_str}\n\n{history_str}\n\nDecide the next action."
+
+    def _parse_response(self, response: Dict)-> Optional[ReactStep]:
+        action = response.get("action","")
+        done = response.get("done",False)
+
+        if done or action == "none":
+            return ReactStep(
+                thought = response.get("thought",""),
+                action="none", parameters={},
+                description=response.get("description","Task completed"),
+                done=True
+            )
+        
+        if action not in VALID_ACTIONS:
+            return None
+        
+        return ReactStep(
+            thought=response.get("thought",""),
+            action=action,
+            parameters=response.get("parameters",{}),
+            description=response.get("description", ""),
+            done= False
+        )
+
+    def _gather_context(self, intent:Intent)->Dict[str,Any]:
+
+        context = {}
+        try:
+            fg = self._window_manager.get_foreground_window()
+            if fg:
+                context["foreground"] = {
+                    "title": fg.title[:50],
+                    "process": fg.process_name
+                }
+        except Exception as e:
+            print(f"Error getting foreground: {e}")
+
+        if intent.target:
+            target = intent.target.lower()
+
+            try:
+                is_running = self._process_manager.is_running(target)
+                context["target_running"] = is_running
+            except:
+                context["target_running"] = False
+            
+            try:
+                window = self._window_manager.find_window(target)
+                context["target_window_found"] = window is not None
+                if window:
+                    context["target_window_title"] = window.title[:50]
+            except:
+                context["target_window_found"] = False
+
+            try:
+                windows = self._window_manager.get_all_windows()[:5]
+                context["open_windows"] = [w.title[:30] for w in windows]
+            except:
+                context["open_windows"] = []
+        return context
+    
+    def create_plan(self, intent:Intent)->Optional[Plan]:
+        context = self._gather_context(intent)
+        history = []
+        steps = []
+
+        for i in range(self.MAX_STEPS):
+            react_step = self.next_step(intent, context, history)
+            if step is None or step.done:
+                break
+            step = Step(
+                id=f"step_{i}_{int(time.time()*1000)}",
+                action=react_step.action,
+                parameters=react_step.parameters,
+                description=react_step.description,
+                thought=react_step.thought,
+                status=StepStatus.PENDING
+            )
+            steps.append(step)
+
+            react_step.observation = Observation(
+                action=react_step.action,
+                parameters=react_step.parameters,
+                success=True,
+            )
+            history.append(react_step)
+
+        if not steps:
+            return None
+        
+        return Plan(steps=steps, strategy="react_generated",
+                    reasoning=history[0].thought if history else "")
 
 class TaskPlanner:
     def __init__(self, auto_subscribe:bool = True):
@@ -603,11 +806,13 @@ Original command: "{intent.raw_command}"
         return self.create_plan(intent=intent)
     
 
+# _planner_instance: Optional[TaskPlanner] = None 
 _planner_instance: Optional[TaskPlanner] = None
-def get_planner(auto_subscribe: bool = False) -> TaskPlanner:
+
+def get_planner(auto_subscribe: bool = False) -> ReactPlanner:
     global _planner_instance
     if _planner_instance is None:
-        _planner_instance = TaskPlanner(auto_subscribe=auto_subscribe)
+        _planner_instance = ReactPlanner(auto_subscribe=auto_subscribe)
     return _planner_instance
 
 def generate_plan(intent: Intent) -> Optional[Plan]:

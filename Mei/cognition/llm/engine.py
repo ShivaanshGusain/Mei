@@ -11,25 +11,25 @@ import os
 
 class LLMEngine:
     
-    def __init__(self):
+    def __init__(self, model_path: str, name: str = 'default', **kwargs):
+        self._name = name
+        self._model_path = model_path
         self.config = get_config()
         self._model = None
         self._model_loaded = False
         self._load_lock = threading.Lock()
-
-        if os.path.isabs(self.config.llm.model_path):
-            self._model_path = self.config.llm.model_path
-        else:
-            self._model_path = str(self.config.root_dir /"models"/"qwen2.5-3b-instruct-q4_k_m.gguf")
-
-        if not os.path.exists(self._model_path):
-            raise FileNotFoundError(f"Model not found {self._model_path}")
         
         self._context_length = self.config.llm.context_length
         self._max_tokens = self.config.llm.max_tokens
         self._temperature = self.config.llm.temperature
-        self._gpu_layers = self.config.llm.gpu_layers
         self._threads = self.config.llm.threads
+        
+        if self._name == "intent":
+            self._gpu_layers = self.config.llm.intent_gpu_layers
+        elif self._name == "planner":
+            self._gpu_layers = self.config.llm.planner_gpu_layers
+        else:
+            self._gpu_layers = self.config.llm.gpu_layers
 
     def _load_model(self)->bool:
         if self._model_loaded:
@@ -39,8 +39,8 @@ class LLMEngine:
             if self._model_loaded:
                 return True
             try:
-                print(f"Loading Model:{self._model_path}")
-                emit(event_type=EventType.LLM_LOADING, source="LLMEngine")
+                print(f"Loading Model [{self._name}]: {self._model_path} (GPU Layers: {self._gpu_layers})")
+                emit(event_type=EventType.LLM_LOADING, source=f"LLMEngine_{self._name}")
 
                 self._model = Llama(
                     model_path=self._model_path,
@@ -51,16 +51,16 @@ class LLMEngine:
                 )
 
                 self._model_loaded = True
-                print("Model Loaded Successfully")
-                emit(EventType.LLM_LOADED, source="LLMEngine")
+                print(f"Model [{self._name}] Loaded Successfully")
+                emit(EventType.LLM_LOADED, source=f"LLMEngine_{self._name}")
                 return True
 
             except Exception as e:
-                print("Failed to load {e}")
-                emit(event_type=EventType.ERROR, source="LLMEngine", error = str(e), operation = "load_model")
+                print(f"Failed to load model [{self._name}]: {e}")
+                emit(event_type=EventType.ERROR, source=f"LLMEngine_{self._name}", error=str(e), operation="load_model")
                 return False
         
-    def complete(self, prompt:str, max_tokens:int = None, temperature:float = None, stop:List[str] = None) -> str:
+    def complete(self, prompt: str, max_tokens: int = None, temperature: float = None, stop: List[str] = None) -> str:
         
         if not self._load_model():
             return ""
@@ -74,72 +74,68 @@ class LLMEngine:
                 prompt=prompt,
                 max_tokens=max_tokens,
                 temperature=temperature,
-                stop= stop,
-                echo= False
+                stop=stop,
+                echo=False
             )
             return output["choices"][0]['text'].strip()
         except Exception as e:
-            emit(EventType.ERROR, source= "LLMEngine", error = str(e), operation = "complete")
+            emit(EventType.ERROR, source=f"LLMEngine_{self._name}", error=str(e), operation="complete")
             return ""
         
-    def chat(self, messages: List[Dict[str,str]], system_prompt : str = None, max_tokens: int = None, temperature: float = None)-> str:
+    def chat(self, messages: List[Dict[str, str]], system_prompt: str = None, max_tokens: int = None, temperature: float = None)-> str:
         if not self._load_model():
             return ""
         
         full_messages = []
-
         if system_prompt:
             full_messages.append({
-                "role":"system",
+                "role": "system",
                 "content": system_prompt
             })
 
         full_messages.extend(messages)
+        max_tokens = max_tokens or self._max_tokens
+        temperature = temperature or self._temperature
 
         try:
             output = self._model.create_chat_completion(
-                messages= full_messages,
-                max_tokens=self._max_tokens,
-                temperature=self._temperature
+                messages=full_messages,
+                max_tokens=max_tokens,
+                temperature=temperature
             )
-
             return output["choices"][0]['message']['content'].strip()
-        
         except Exception as e:
-            emit(EventType.ERROR, source="LLMEngine", error = str(e), operation = "chat")
+            emit(EventType.ERROR, source=f"LLMEngine_{self._name}", error=str(e), operation="chat")
             return ""
     
-    def chat_json(self, messages: List[Dict[str,str]], system_prompt:str = None, max_retries:int = 2)->Optional[Dict]:
+    def chat_json(self, messages: List[Dict[str, str]], system_prompt: str = None, max_retries: int = 2)->Optional[Dict]:
         json_system = system_prompt if system_prompt else ""
         if "json" not in json_system.lower():
-            json_system+= "\n\n Respond with vaild JSON only. No other text."
+            json_system += "\n\n Respond with valid JSON only. No other text."
         
-        for attempt in range(max_retries +1):
-            response = self.chat(messages, json_system, temperature=self.config.llm.temperature)
+        for attempt in range(max_retries + 1):
+            response = self.chat(messages, json_system, temperature=self._temperature)
 
             if not response:
                 continue
         
-        try:
-            return json.loads(response)
-
-        except json.JSONDecodeError:
-            json_str = self._extract_json(response)
-            if json_str:
-                try:
-                    return json.loads(json_str)
-                except:
-                    pass
+            try:
+                return json.loads(response)
+            except json.JSONDecodeError:
+                json_str = self._extract_json(response)
+                if json_str:
+                    try:
+                        return json.loads(json_str)
+                    except:
+                        pass
             
-        if attempt< max_retries:
-            messages = messages + [
-                {"role":"assistant","content":response},
-                {"role":"user","content":"This was not valid JSON. Please respond with ONLY a JSON object, no other text."
-                 }
-            ]
+            if attempt < max_retries:
+                messages = messages + [
+                    {"role": "assistant", "content": response},
+                    {"role": "user", "content": "This was not valid JSON. Please respond with ONLY a JSON object, no other text."}
+                ]
 
-        
-        emit(EventType.ERROR, source= "LLMEngine", error = "Failed to get valid JSON", operator = "chat_json")
+        emit(EventType.ERROR, source=f"LLMEngine_{self._name}", error="Failed to get valid JSON", operation="chat_json")
         return None
     
     def _extract_json(self,text:str)->Optional[str]:
@@ -174,10 +170,21 @@ class LLMEngine:
             
             emit(EventType.LLM_UNLOADED, source = "LLMEngine")
     
-_engine_instance:Optional[LLMEngine] = None
+# _engine_instance:Optional[LLMEngine] = None
 
-def get_llm_engine()->LLMEngine:
-    global _engine_instance
+_engines = Dict[str, LLMEngine] = {}
+def get_llm_engine(name: str = "default")->LLMEngine:
+    global _engines
+    
+    if name not in _engines:
+        config = get_config()
+        if name == "intent":
+            path = config.llm.intent_model_path
+        elif name == "planner":
+            path = config.llm.intent_model_path
+        else:
+            path = config.llm.model_path
+        _engines[name] = LLMEngine(model_path=path, name=name)
     if _engine_instance is None:
         _engine_instance = LLMEngine()
     return _engine_instance

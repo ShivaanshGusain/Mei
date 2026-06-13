@@ -10,6 +10,28 @@ if TYPE_CHECKING:
     from .task import Intent, Plan
 ROOT_DIR = Path(__file__).parent.parent.parent
 
+@dataclass
+class Observation:
+    """Result of executing a single step — fed back to the planner."""
+    action: str
+    parameters: Dict[str, Any]
+    success: bool
+    result_data: Dict[str, Any] = field(default_factory=dict)
+    error: Optional[str] = None
+    # Environment snapshot
+    foreground_window: Optional[str] = None
+    foreground_process: Optional[str] = None
+
+@dataclass
+class ReactStep:
+    """A single thought → action → observation turn."""
+    thought: str
+    action: str
+    parameters: Dict[str, Any]
+    description: str
+    done: bool = False
+    observation: Optional[Observation] = None
+
 
 @dataclass
 class AudioConfig:
@@ -235,12 +257,19 @@ class VisualAnalysisResult:
 class LLMConfig:
     """Language Model settings"""
     model_path: str = str(Path(__file__).parent.parent.parent /"models"/"qwen2.5-3b-instruct-q4_k_m.gguf")
-    context_length = 4096
+    context_length: int = 4096
     max_tokens: int = 512
     temperature: float = 0.1
-    threads: int = 4
+    threads: int = 16
     gpu_layers: int = -1
 
+    """Model path's for intent and planner modules"""
+    intent_model_path: str = str(Path(__file__).parent.parent.parent/"models"/"Phi-3.5-mini-instruct.Q5_K_M.gguf")
+    planner_model_path: str = str(Path(__file__).parent.parent.parent/"models"/"ToolACE-2-8B.Q4_K_M.gguf")
+
+    intent_gpu_layers: int = 0
+    planner_gpu_layers: int = -1
+    
 @dataclass
 class ActionResult:
     success:bool
@@ -497,6 +526,9 @@ class MemoryConfig:
 @dataclass
 class Config:
     """Main configuration"""
+    reactstep: ReactStep = field(default_factory=ReactStep)
+    observation: Observation = field(default_factory=Observation)
+
     audio: AudioConfig = field(default_factory=AudioConfig)
     knownapps: KnownApps = field(default_factory= KnownApps)
     llm: LLMConfig = field(default_factory=LLMConfig)
