@@ -1,9 +1,13 @@
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from datetime import datetime
 
 from .events import EventType, Event, emit, subscribe
 from ..cognition.nlu.intent import extract_intent, get_intent_extractor
-from ..cognition.planning.planner import generate_plan, get_planner, TaskPlanner
+from ..cognition.planning.planner import generate_plan, get_planner, ReactPlanner
+from ..perception.System.windows import WindowManager
+from  .config import Observation
+
+from ..core.config import ReactStep
 from .task import Intent, Plan
 _pipeline_active: bool = False
 _processed_count: int = 0
@@ -121,7 +125,60 @@ def _on_plan_failed(event: Event) -> None:
 
     print(f"\n[Pipeline] ✗ Failed: {action} → {target} — {error} ({duration:.0f}ms)")
 
+def _execute_loop(intent:Intent)-> None:
+    """Run the full ReAct loop for a given input."""
+    planner = get_planner()
+    executor = get_executor()
 
+    context = planner._gather_context(intent)
+    history: List[ReactStep] = []
+
+    for step_num in range(ReactPlanner.MAX_STEPS):
+        step = planner.next_step(intent, context, history)
+        
+        if step is None:
+            emit(EventType.PLAN_FAILED, source= "Pipeline",
+                 intent= intent, reason= "Planner returned no step")
+            return
+        
+        if step.done:
+            emit(event_type=EventType.PLAN_COMPLETED, source= "Pipeline",
+                 intent=intent, steps_completed=len(history))
+            return
+        
+        result = executor.execute_single_action(
+            step.action, step.parameters
+        )
+
+        try:
+            fg = WindowManager().get_foreground_window()
+            fg_title = fg.title[:50] if fg else None
+            fg_process = fg.process_name if fg else None
+        except:
+            fg_title, fg_process = None, None
+        
+        observation = Observation(
+            action=step.action,
+            parameters=step.parameters,
+            success=result.success,
+            result_data=result.data or {},
+            error=result.error,
+            foreground_window=fg_title,
+            foreground_process=fg_process,
+        )
+        step.observation = observation
+
+        history.append(step)
+
+        #[TODO]logging function implement here
+        # _log_turn(intent,step,step_num)
+
+        context = planner._gather_context(intent)
+    
+    emit(EventType.PLAN_FAILED, source="Pipeline",
+         intent=intent, reason=f"Exceeded {ReactPlanner.MAX_STEPS} steps")
+
+#[TODO] subscribe to appropriate functions for ReAct loop
 
 def start_pipeline() -> None:
     """Subscribe to events and start the pipeline."""
@@ -134,7 +191,7 @@ def start_pipeline() -> None:
     subscribe(EventType.TRANSCRIBE_COMPLETED, _on_transcription_complete)
     subscribe(EventType.PLAN_COMPLETED, _on_plan_completed)
     subscribe(EventType.PLAN_FAILED, _on_plan_failed)
-
+    
     _pipeline_active = True
     _processed_count = 0
     _last_processed = None

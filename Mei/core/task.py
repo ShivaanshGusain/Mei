@@ -39,6 +39,8 @@ class Intent:
     parameters: Dict[str, Any] = field(default_factory=dict)  # e.g., {"query": "cats"}
     confidence: float = 0.0
     raw_command: str = ""
+    complexity: str = "simple" 
+    domain: str = "unknown"
     
     def __str__(self):
         return f"Intent({self.action}, target={self.target}, params={self.parameters})"
@@ -324,6 +326,7 @@ class Step:
     action: str = ""                     # Action type: "focus_window", "type", "click", etc.
     parameters: Dict[str, Any] = field(default_factory=dict)
     description: str = ""                # Human-readable description
+    thought: str = ""
     status: StepStatus = StepStatus.PENDING
     result: Optional[Dict[str, Any]] = None
     error: Optional[str] = None

@@ -13,9 +13,9 @@ ROOT_DIR = Path(__file__).parent.parent.parent
 @dataclass
 class Observation:
     """Result of executing a single step — fed back to the planner."""
-    action: str
-    parameters: Dict[str, Any]
-    success: bool
+    action: str = ""
+    parameters: Dict[str, Any] = field(default_factory=dict)
+    success: bool = False
     result_data: Dict[str, Any] = field(default_factory=dict)
     error: Optional[str] = None
     # Environment snapshot
@@ -25,10 +25,10 @@ class Observation:
 @dataclass
 class ReactStep:
     """A single thought → action → observation turn."""
-    thought: str
-    action: str
-    parameters: Dict[str, Any]
-    description: str
+    thought: str = ""
+    action: str = ""
+    parameters: Dict[str, Any] = field(default_factory=dict)
+    description: str = ""
     done: bool = False
     observation: Optional[Observation] = None
 
@@ -256,8 +256,8 @@ class VisualAnalysisResult:
 @dataclass
 class LLMConfig:
     """Language Model settings"""
-    model_path: str = str(Path(__file__).parent.parent.parent /"models"/"qwen2.5-3b-instruct-q4_k_m.gguf")
-    context_length: int = 4096
+    # model_path: str = str(Path(__file__).parent.parent.parent /"models"/"qwen2.5-3b-instruct-q4_k_m.gguf")
+    context_length: int = 16384
     max_tokens: int = 512
     temperature: float = 0.1
     threads: int = 16
@@ -268,7 +268,7 @@ class LLMConfig:
     planner_model_path: str = str(Path(__file__).parent.parent.parent/"models"/"ToolACE-2-8B.Q4_K_M.gguf")
 
     intent_gpu_layers: int = 0
-    planner_gpu_layers: int = -1
+    planner_gpu_layers: int = 27
     
 @dataclass
 class ActionResult:
@@ -614,6 +614,10 @@ class Config:
                 'temperature': self.llm.temperature,
                 'threads': self.llm.threads,
                 'gpu_layers': self.llm.gpu_layers,
+                'intent_model_path':self.llm.intent_model_path,
+                'planner_model_path': self.llm.planner_model_path,
+                'intent_gpu_layers': self.llm.intent_gpu_layers,
+                'planner_gpu_layers': self.llm.planner_gpu_layers
             },
             'system': {
                 'multi_monitor': self.system.multi_monitor,
