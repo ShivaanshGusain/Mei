@@ -8,25 +8,95 @@ from ...perception.System.process import ProcessManager
 from typing import Optional, List,Dict, Any
 from datetime import datetime
 import time
+#[TODO] Model failing on planner level and is not getting complexity as an input from planner.
+# Fix planner's prompt and ReAct loop 
+
 
 VALID_ACTIONS = {
-    "launch_app",     
-    "terminate_app",  
-    "focus_window",   
+    # App
+    "launch_app",
+    "terminate_app",
+
+    # Window
+    "focus_window",
     "minimize_window",
     "maximize_window",
-    "restore_window", 
-    "close_window",   
-    "type_text",      
-    "hotkey",         
-    "click",          
-    "scroll",         
-    "navigate_url",   
-    "wait",           
-    "find_element"    
+    "restore_window",
+    "close_window",
+
+    # Input
+    "type_text",
+    "hotkey",
+    "click",
+    "scroll",
+
+    # Generic GUI / perception
+    "find_element",
+    "wait",
+
+    # Web / browser
+    "navigate_url",
+    "search_web",
+    "web_click",
+    "web_type",
+    "web_scroll",
+    "web_keypress",
+    "close_tab",
+    "switch_tab",
+
+    # File / system
+    "open_path",
+    "create_file",
+    "create_folder",
+    "move_file",
+    "delete_file",
+    "rename_file",
+    "run_shell_command",
+    "get_clipboard_text",
+
+    # Workspace / dev
+    "open_in_vscode",
+    "open_terminal",
+    "run_main_file",
+    "start_dev_server",
+    "clone_repo",
+    "download_file",
+
+    # Completion
+    "none"
 }
-"""IN-PROGRESS————Addition to the planning module to support ReAct loop system
-   Follow up  ————Next in executor for Execution loop"""
+#[TODO] implement this for _build_system_prompt()
+ACTIONS_BY_DOMAIN = {
+    "app": {
+        "launch_app", "terminate_app"
+    },
+    "window": {
+        "focus_window", "minimize_window", "maximize_window",
+        "restore_window", "close_window"
+    },
+    "input": {
+        "type_text", "hotkey", "click", "scroll", "find_element"
+    },
+    "web": {
+        "navigate_url", "search_web", "web_click", "web_type",
+        "web_scroll", "web_keypress", "close_tab", "switch_tab"
+    },
+    "file": {
+        "open_path", "create_file", "create_folder", "move_file",
+        "delete_file", "rename_file"
+    },
+    "workspace": {
+        "open_in_vscode", "open_terminal", "run_main_file",
+        "start_dev_server", "clone_repo", "run_shell_command"
+    },
+    "system": {
+        "get_clipboard_text", "wait"
+    }
+}
+
+"""IN-PROGRESS ———— Addition to the planning module to support ReAct loop system
+   Follow up   ———— Next in executor for Execution loop
+               ———— Addition for specific text based on the tools"""
 REACT_SYSTEM_PROMPT = """
 You are a ReAct agent for a Windows desktop automation assistant.
 Given the user's intent, current system state, and history of previous actions + observations,
@@ -65,7 +135,202 @@ RULES:
 3. Use observations to adapt — if something failed, try a different approach.
 4. Set done=true ONLY when the user's original intent is fully satisfied.
 5. Maximum 10 steps per task to prevent infinite loops.
+6. Never output an action not listed in Available actions
+7. Do not invent synonyms like switch_tab or search_web; map to the closest listed action.
+8. If the goal is already satisfied in the current context, return done=true with action='none'.
+9. Do not repeat the same action with the same parameters unless the last observation indicates it failed and retrying is reasonable.
+10.Choose actions that directly advance the user's goal; ignore unrelated foreground windows unless they must be changed
+EXAMPLES
 
+EXAMPLE 1 - "Open an app not running
+User intent:
+{
+  "action": "open",
+  "target": "brave",
+  "parameters": {}
+}
+
+Context:
+{
+  "target_running": false,
+  "foreground_window": "Training a model - Lab"
+}
+
+History:
+[]
+
+Response:
+{
+  "thought": "The user wants Brave opened. Brave is not running, so the next step is to launch it. Focusing the current unrelated window does not help.",
+  "action": "launch_app",
+  "parameters": {"app_name": "Brave"},
+  "description": "Launch the Brave browser.",
+  "done": false
+}
+
+EXAMPLE 2 - "Focus an app already running"
+User intent:
+{
+  "action": "open",
+  "target": "brave",
+  "parameters": {}
+}
+
+Context:
+{
+  "target_running": true,
+  "target_window_found": true,
+  "target_window_title": "Brave"
+}
+
+History:
+[]
+
+Response:
+{
+  "thought": "Brave is already running, so I should bring its window to the foreground instead of launching a new instance.",
+  "action": "focus_window",
+  "parameters": {"query": "Brave"},
+  "description": "Bring the Brave window to the foreground.",
+  "done": false
+}
+
+EXAMPLE 3 - "Type text"
+User intent:
+{
+  "action": "type",
+  "target": null,
+  "parameters": {"text": "hello world"}
+}
+
+Context:
+{
+  "foreground_window": "Notepad"
+}
+
+History:
+[]
+
+Response:
+{
+  "thought": "The user wants text entered into the current focused context. The next step is to type the provided text.",
+  "action": "type_text",
+  "parameters": {"text": "hello world"},
+  "description": "Type hello world into the current focused field.",
+  "done": false
+}
+
+EXAMPLE 4 - "Switch to a named window"
+User intent:
+{
+  "action": "focus",
+  "target": "notepad",
+  "parameters": {}
+}
+
+Context:
+{
+  "open_windows": ["Notepad", "Brave", "Visual Studio Code"]
+}
+
+History:
+[]
+
+Response:
+{
+  "thought": "The user wants the Notepad window. Since a matching window exists, the next step is to focus it.",
+  "action": "focus_window",
+  "parameters": {"query": "Notepad"},
+  "description": "Bring the Notepad window to the foreground.",
+  "done": false
+}
+
+EXAMPLE 5 - "Search on YouTube from scratch"
+User intent:
+{
+  "action": "search",
+  "target": "youtube",
+  "parameters": {"query": "cats"}
+}
+
+Context:
+{
+  "target_running": false
+}
+
+History:
+[]
+
+Response:
+{
+  "thought": "The user wants to search YouTube for cats. The first step is to open a browser so I can navigate to the search results.",
+  "action": "launch_app",
+  "parameters": {"app_name": "Brave"},
+  "description": "Launch a browser for the YouTube search.",
+  "done": false
+}
+
+Continue after browser opened
+User intent:
+{
+  "action": "search",
+  "target": "youtube",
+  "parameters": {"query": "cats"}
+}
+
+Context:
+{
+  "foreground_window": "Brave"
+}
+
+History:
+[
+  {
+    "action": "launch_app",
+    "parameters": {"app_name": "Brave"},
+    "observation": {"success": true}
+  }
+]
+
+Response:
+{
+  "thought": "The browser is open now. The next step is to navigate directly to the YouTube search results URL for cats.",
+  "action": "navigate_url",
+  "parameters": {"url": "https://www.youtube.com/results?search_query=cats"},
+  "description": "Open YouTube search results for cats.",
+  "done": false
+}
+
+Finish correctly 
+User intent:
+{
+  "action": "open",
+  "target": "brave",
+  "parameters": {}
+}
+
+Context:
+{
+  "foreground_window": "Brave"
+}
+
+History:
+[
+  {
+    "action": "launch_app",
+    "parameters": {"app_name": "Brave"},
+    "observation": {"success": true}
+  }
+]
+
+Response:
+{
+  "thought": "Brave is now open and in the foreground, so the user's goal has been achieved.",
+  "action": "none",
+  "parameters": {},
+  "description": "Task complete",
+  "done": true
+}
 """
 
 PLANNER_SYSTEM_PROMPT = """
@@ -80,7 +345,6 @@ APP CONTROL:
                   Start an application                                  
                   params: {app_name: str}                                   
                   Example: {"app_name": "chrome"}   
-
                   
  terminate_app    
                   Kill an application                                       
@@ -359,11 +623,11 @@ class ReactPlanner:
     MAX_STEPS = 15
 
     def __init__(self, auto_subscribe: bool = True):
-        self._llm = get_llm_engine("planner")
+        self._llm = get_llm_engine("planner")["planner"]
         self._window_manager = WindowManager()
         self._process_manager = ProcessManager()
 
-        if auto_subscribe:
+        if auto_subscribe == True:
             subscribe(EventType.INTENT_RECOGNIZED, self._on_intent)
             subscribe(EventType.PLAN_FAILED, self._on_plan_failed)
         
@@ -378,18 +642,18 @@ class ReactPlanner:
                 done = True
             )
         
-        prompt = self._build_prompt(intent,context, history)
-        messages = [{"role":"user","context":prompt}]
+        prompt = self._build_react_prompt(intent,context, history)
+        messages = [{"role":"user","content":prompt}]
 
         response = self._llm.chat_json(
             messages=messages,
-            system_prompt=self._build_system_prompt(intent)
+            system_prompt=self._build_system_prompt()
         )
 
         if not response:
             return None
         
-        return self._parse_react_response(response)
+        return self._parse_response(response)
     
     def _build_react_prompt(self,intent: Intent, context: Dict[str,Any], history:List[ReactStep]):
         intent_str = f"""
@@ -468,19 +732,19 @@ Domain: {intent.domain}"""
             except:
                 context["target_running"] = False
             
-            try:
-                window = self._window_manager.find_window(target)
-                context["target_window_found"] = window is not None
-                if window:
-                    context["target_window_title"] = window.title[:50]
-            except:
-                context["target_window_found"] = False
+        try:
+            window = self._window_manager.find_window(target)
+            context["target_window_found"] = window is not None
+            if window:
+                context["target_window_title"] = window.title[:50]
+        except:
+            context["target_window_found"] = False
 
-            try:
-                windows = self._window_manager.get_all_windows()[:5]
-                context["open_windows"] = [w.title[:30] for w in windows]
-            except:
-                context["open_windows"] = []
+        try:
+            windows = self._window_manager.get_all_windows()[:5]
+            context["open_windows"] = [w.title[:30] for w in windows]
+        except:
+            context["open_windows"] = []
         return context
     
     def create_plan(self, intent:Intent)->Optional[Plan]:
@@ -490,7 +754,7 @@ Domain: {intent.domain}"""
 
         for i in range(self.MAX_STEPS):
             react_step = self.next_step(intent, context, history)
-            if step is None or step.done:
+            if react_step is None or react_step.done:
                 break
             step = Step(
                 id=f"step_{i}_{int(time.time()*1000)}",
@@ -502,18 +766,53 @@ Domain: {intent.domain}"""
             )
             steps.append(step)
 
+
+            # Fake Observation for testing
+
             react_step.observation = Observation(
                 action=react_step.action,
                 parameters=react_step.parameters,
                 success=True,
             )
             history.append(react_step)
-
+            context = self._gather_context(intent)
         if not steps:
             return None
         
         return Plan(steps=steps, strategy="react_generated",
                     reasoning=history[0].thought if history else "")
+    
+    def _format_context(self, context: Dict[str, Any]) -> str:
+            lines = []
+
+            fg = context.get("foreground")
+            if fg:
+                lines.append(f"FOREGROUND WINDOW: {fg.get('title')} (process: {fg.get('process')})")
+
+            if "target_running" in context:
+                lines.append(f"TARGET APP RUNNING: {context['target_running']}")
+
+            if "target_window_found" in context:
+                status = "found" if context["target_window_found"] else "not found"
+                lines.append(f"TARGET WINDOW: {status}")
+                if context.get("target_window_title"):
+                    lines.append(f"TARGET WINDOW TITLE: {context['target_window_title']}")
+
+            open_windows = context.get("open_windows") or []
+            if open_windows:
+                lines.append("OPEN WINDOWS (sample): " + ", ".join(open_windows))
+
+            if not lines:
+                return "CONTEXT: (no special context available)"
+
+            return "CONTEXT:\n" + "\n".join(lines)
+   
+   #[TODO]
+    def _build_system_prompt(self, intent: Intent = None) -> str:
+        """Can pass intent for domain specific prompt for model.
+           Currently it's set to a local prompt."""
+        action_catalog = ", ".join(sorted(VALID_ACTIONS))
+        return REACT_SYSTEM_PROMPT.replace("{action_catalog}", action_catalog)
 
 class TaskPlanner:
     def __init__(self, auto_subscribe:bool = True):
@@ -805,7 +1104,6 @@ Original command: "{intent.raw_command}"
         )
         return self.create_plan(intent=intent)
     
-
 # _planner_instance: Optional[TaskPlanner] = None 
 _planner_instance: Optional[TaskPlanner] = None
 
@@ -821,13 +1119,14 @@ def generate_plan(intent: Intent) -> Optional[Plan]:
 if __name__ == "__main__":
     from ..nlu.intent import extract_intent
 
-    planner = TaskPlanner(auto_subscribe=False)
+    planner = ReactPlanner(auto_subscribe=False)
     time.sleep(5)
     test_commands = [
         "open brave",
         "search for cats on youtube",
         "type hello world",
-        "switch to notepad"
+        "switch to notepad",
+        "open brave"
     ]
 
     for cmd in test_commands:

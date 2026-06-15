@@ -103,6 +103,7 @@ class LLMEngine:
                 max_tokens=max_tokens,
                 temperature=temperature
             )
+
             return output["choices"][0]['message']['content'].strip()
         except Exception as e:
             emit(EventType.ERROR, source=f"LLMEngine_{self._name}", error=str(e), operation="chat")
@@ -172,7 +173,7 @@ class LLMEngine:
     
 # _engine_instance:Optional[LLMEngine] = None
 
-_engines = Dict[str, LLMEngine] = {}
+_engines: Dict[str, LLMEngine] = {}
 def get_llm_engine(name: str = "default")->LLMEngine:
     global _engines
     
@@ -181,11 +182,11 @@ def get_llm_engine(name: str = "default")->LLMEngine:
         if name == "intent":
             path = config.llm.intent_model_path
         elif name == "planner":
-            path = config.llm.intent_model_path
+            path = config.llm.planner_model_path
         else:
             path = config.llm.model_path
         _engines[name] = LLMEngine(model_path=path, name=name)
-    if _engine_instance is None:
-        _engine_instance = LLMEngine()
-    return _engine_instance
+    if _engines is None:
+        _engines = LLMEngine()
+    return _engines
 
