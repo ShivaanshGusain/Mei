@@ -1,0 +1,43 @@
+App tools (you already have):
+
+
+launch_app, terminate_app, list_apps, maybe is_app_running.
+
+Window / GUI tools (you already have core ones):
+
+
+
+focus_window, minimize_window, maximize_window, restore_window, close_window.
+
+find_element, click, scroll with accessibility + visual fallback.
+
+Input tools (which you’re already refactoring):
+
+
+
+type_text, hotkey/send_keys, mouse_move, mouse_click, mouse_scroll, maybe drag.
+
+System tools (to add):
+
+
+run_shell_command (carefully sandboxed),
+
+list_files, open_folder, create_file_or_folder, read_file,
+
+maybe get_system_info (battery, network, etc.) depending on your goals.
+
+Web tools (CDP / Playwright later):
+
+
+web_navigate, web_click, web_type, web_scroll, web_get_state, web_keypress, web_close_tab, web_wait_for.
+
+Workspace/macros:
+
+
+init_workspace(name) which encapsulates multi‑step flows like “open VSCode, open terminal, start Docker, open browser dashboard”.
+
+Memory/teaching tools:
+
+
+remember_pattern, load_pattern, to interact with your memory store / cached plans, especially when the user says “do it like last time”.
+

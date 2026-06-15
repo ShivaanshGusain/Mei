@@ -1,0 +1,19 @@
+
+
+
+def web_navigate()
+
+def web_click()
+
+def web_type
+
+def web_get_state
+
+def web_scroll
+
+def web_keypress
+
+def web_close_tab
+
+def web_query   
+
