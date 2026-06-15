@@ -1,6 +1,6 @@
-from .window import get_window_handlers, WINDOW_HANDLERS
+from .window import register_window_tools
 from .app import register_app_tools
-from .input import get_input_handlers, INPUT_HANDLERS
+from .input import register_input_tools
 from .navigation import get_navigation_handlers, NAVIGATION_HANDLERS
 from .utility import get_util_handers, UTIL_HANDLERS
 """
@@ -23,7 +23,7 @@ def register_all_tools(executor) -> None:
         print(f"Failed to register app tools: {e}")
 
     try:
-        register_gui_tools(executor)
+        register_window_tools(executor)
     except Exception as e:
         print(f"Failed to register gui tools: {e}")
     
@@ -31,7 +31,7 @@ def register_all_tools(executor) -> None:
         register_input_tools(executor)
     except Exception as e:
         print(f"Failed to register input tools: {e}")
-    
+    e
     try:
         register_web_tools(executor)
     except Exception as e:

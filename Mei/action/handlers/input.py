@@ -1,5 +1,5 @@
 import time
-from typing import Dict, Any, Tuple, Optional, List
+from typing import Dict, Any, Tuple, Optional
 from datetime import datetime
 
 from ...core.task import ActionHandler

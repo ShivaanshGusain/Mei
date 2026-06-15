@@ -24,6 +24,9 @@ DEFULT_TYPE_INTERVAL = 0.02
 DEFAULT_CLICK_PAUSE = 0.1
 DEFAULT_SCROLL_AMOUNT = 3
 
+
+
+
 """Helper functions"""
 def _get_ui_automation()->UIAutomationManager:
     global _ui_automation_manager
@@ -47,7 +50,7 @@ def _resolve_window(params: Dict[str,Any], context: ExecutionContext, require_ma
         else:
             return ( None, f"Window with hwnd {hwnd} not found")
         
-    query  = params.get('query') or params.get('title') # or params.get('app_name')
+    query  = params.get('query') or params.get('title')
     if query:
         window = window_manager.find_window(str(query))
         if window:
@@ -965,7 +968,17 @@ FIND_ELEMENT_SCHEMA = {
     "cache_as"    : {"type": "str", "required": True, "description": "cache the element under this name"}
 
 }   
-def register_gui_tools(executor: PlanExecutor):
+def register_window_tools(executor: PlanExecutor):
+    """Tools related to window operations -> \n
+    - find_window  ->  find window among the open windows\n
+    - verify_window  ->  verify the presence of the widow\n
+    - focus_window  ->  focus on the specified window\n
+    - minimize_window  ->  minimize the given window\n
+    - maximize_window  ->  maximize the given window\n
+    - restore_window  ->  restore the given window\n
+    - close_window  ->  close the given window\n
+    - find_element  ->  find the given element in the window\n
+    """
     executor.register(
         name="find_window",
         schema=FIND_WINDOW_SCHEMA,
@@ -1039,7 +1052,10 @@ def register_gui_tools(executor: PlanExecutor):
         description="find the given element in the window",
         requires_screen=True,
     )
+
 """
+Previous
+
 WINDOW_HANDLERS = [
     FindWindowHandler,
     VerifyWindowHandler,
@@ -1057,8 +1073,7 @@ WINDOW_HANDLERS = [
 
 def get_window_handlers()->list:
     return [handler_class() for handler_class in WINDOW_HANDLERS]
-""" 
-    
+
 
 if __name__ == "__main__":                                   
     import time                                              
@@ -1219,3 +1234,4 @@ if __name__ == "__main__":
     print("WINDOW HANDLERS TEST COMPLETE")                   
     print("=" * 60)                                          
                                                              
+"""

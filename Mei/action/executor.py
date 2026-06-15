@@ -8,7 +8,6 @@ from ..core.events import EventType, Event, emit, subscribe, get_event_bus
 
 from ..core.state import AgentState, get_state_machine
 
-
 from .context import ExecutionContext
 from .toolspec import ToolSpec
 
@@ -101,6 +100,7 @@ class PlanExecutor:
                  requires_window: bool = False,
                  requires_ui_tree: bool = False,
                  cost: int = 1,
+                 supports_verification: bool = True,
                  description: str = "") -> None:
         """Builds a ToolSpec from args and store it."""
         spec = ToolSpec(
@@ -115,11 +115,12 @@ class PlanExecutor:
             requires_window=requires_window,
             requires_ui_tree=requires_ui_tree,
             cost=cost,
-            description=description
+            description=description,
+            supports_verification=supports_verification
         )
         if name in self._tools:
             print(f"Overwriting tool '{name}'")
-        self._tool[name] = spec
+        self._tools[name] = spec
         print(f"Registered tool: {name} [{domain}]")
 
     
@@ -250,7 +251,8 @@ class PlanExecutor:
             print(f"Execution ID: {execution_id}")
 
         return plan_success
-    
+
+    """[TODO]To be updated for ReAct loop"""
     def _execute_step(self, step:Step, step_index:int, context: ExecutionContext)->Tuple[bool, Optional[str]]:
         context.current_step_index = step_index
 
@@ -429,7 +431,6 @@ class PlanExecutor:
                 duration_ms=step_duration_ms          
             )           
             return (False, error_msg)                          
-
 
     def execute_single_action(self, action:str, parameters: Dict[str, Any])->ActionResult:
         # handler = self.get_handler(action)
