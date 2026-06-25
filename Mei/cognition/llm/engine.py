@@ -26,11 +26,13 @@ class LLMEngine:
         
         if self._name == "intent":
             self._gpu_layers = self.config.llm.intent_gpu_layers
+            self._context_length = self.config.llm.intent_context_length
         elif self._name == "planner":
             self._gpu_layers = self.config.llm.planner_gpu_layers
+            self._context_length = self.config.llm.planner_context_length
         else:
             self._gpu_layers = self.config.llm.gpu_layers
-
+    
     def _load_model(self)->bool:
         if self._model_loaded:
             return True
@@ -186,7 +188,6 @@ def get_llm_engine(name: str = "default")->LLMEngine:
         else:
             path = config.llm.model_path
         _engines[name] = LLMEngine(model_path=path, name=name)
-    if _engines is None:
-        _engines = LLMEngine()
-    return _engines
+    
+    return _engines[name]
 

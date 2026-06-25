@@ -1,3 +1,4 @@
+import re
 from ...core.config import get_config
 from ...core.events import emit, subscribe, EventType
 from ...core.task import Intent
@@ -5,6 +6,63 @@ from ..llm.engine import get_llm_engine
 from typing import Optional, Dict, List,Any
 
 import json
+
+SHORTCUT_MAP = {
+    "copy": ["ctrl", "c"],
+    "paste": ["ctrl", "v"],
+    "undo": ["ctrl", "z"],
+    "redo": ["ctrl", "y"],
+    "cut": ["ctrl", "x"],
+    "save": ["ctrl", "s"],
+}
+
+FAST_PATTERNS = [
+    (
+        re.compile(r"^scroll\s+(up|down)$", re.IGNORECASE),
+        lambda m: Intent(
+            action="scroll",
+            parameters={"direction": m.group(1).lower()},
+            confidence=1.0,
+            raw_command=m.string,
+            complexity="simple",
+            domain="system",
+        ),
+    ),
+    (
+        re.compile(r"^press\s+(enter|escape|tab|space|delete|backspace)$", re.IGNORECASE),
+        lambda m: Intent(
+            action="hotkey",
+            parameters={"keys": [m.group(1).lower()]},
+            confidence=1.0,
+            raw_command=m.string,
+            complexity="simple",
+            domain="system",
+        ),
+    ),
+    (
+        re.compile(r"^(copy|paste|undo|redo|cut|save)$", re.IGNORECASE),
+        lambda m: Intent(
+            action="hotkey",
+            parameters={"keys": SHORTCUT_MAP[m.group(1).lower()]},
+            confidence=1.0,
+            raw_command=m.string,
+            complexity="simple",
+            domain="system",
+        ),
+    ),
+    (
+        re.compile(r"^(minimize|maximize|restore)\s*(this|current)?(\s*window)?$", re.IGNORECASE),
+        lambda m: Intent(
+            action=m.group(1).lower(),
+            target="current",
+            parameters={},
+            confidence=1.0,
+            raw_command=m.string,
+            complexity="simple",
+            domain="system",
+        ),
+    ),
+]
 
 #[TODO] Improve the following prompt, and match the modules
 
@@ -215,7 +273,7 @@ target can be null. parameters must always be an object.
 class IntentExtractor:
 
   def __init__(self, auto_subscribe: bool = True):
-      self._llm = get_llm_engine("intent")['intent']
+      self._llm = get_llm_engine("intent")
 
       if auto_subscribe:
           subscribe(event_type=EventType.TRANSCRIBE_COMPLETED,handler=self._on_transcribe)
@@ -250,12 +308,25 @@ class IntentExtractor:
       if intent:
           emit(EventType.INTENT_RECOGNIZED, source="IntentExtractor",intent=intent, raw_text=text)
   
+  #[NOTE] Should't cause any issue with complex commands.
+  def _try_fast_extract(self, text: str) -> Optional[Intent]:
+        for pattern, builder in FAST_PATTERNS:
+            match = pattern.match(text)
+            if match:
+                return builder(match)
+        return None
+  
   def extract(self,text:str)->Optional[Intent]:
 
       text = text.strip()
       if not text:
           return None
-  
+      
+      fast_intent = self._try_fast_extract(text)
+
+      if fast_intent:
+        return fast_intent
+      
       messages = [
           {"role":"user","content":text}
       ]
@@ -283,7 +354,7 @@ class IntentExtractor:
       target = response.get("target")
       parameters = response.get("parameters",{})
       complexity = response.get("complexity", "simple")
-      domain = response.get("domain", "system")
+      domain = response.get("domain", "unknown")
 
       if not action:
           return None

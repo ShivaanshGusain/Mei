@@ -11,6 +11,53 @@ import time
 #[TODO] Model failing on planner level and is not getting complexity as an input from planner.
 # Fix planner's prompt and ReAct loop 
 
+ACTION_CATALOG  = """
+APP CONTROL:
+  launch_app(app_name: str)
+    Launch an application or focus it if already running.
+    
+  terminate_app(app_name: str OR pid: int)
+    Kill a running application.
+WINDOW CONTROL:
+  focus_window(query: str)
+    Bring a window to the foreground by title search.
+    
+  minimize_window(query?: str)
+    Minimize a window. Empty params = current window.
+    
+  maximize_window(query?: str)
+    Maximize a window.
+    
+  restore_window(query?: str)
+    Restore a minimized/maximized window.
+    
+  close_window(query?: str)
+    Close a window.
+INPUT:
+  type_text(text: str, element_query?: str, clear_first?: bool)
+    Type text into current focus or a specific element.
+    
+  hotkey(keys: list[str])
+    Press a keyboard shortcut. Example: ["ctrl", "c"]
+    
+  click(query: str OR x: int + y: int, click_type?: "right"|"double")
+    Click on a UI element by name, or at coordinates.
+    
+  scroll(direction: "up"|"down", amount?: int)
+    Scroll the mouse wheel.
+NAVIGATION:
+  navigate_url(url: str, new_tab?: bool)
+    Open a URL in the default browser.
+UTILITY:
+  wait(seconds: float, reason?: str)
+    Pause execution.
+    
+  find_element(query: str, element_type?: str, timeout?: float)
+    Find and cache a UI element without acting on it.
+COMPLETION:
+  none()
+    Signal that the task is complete. Set done=true.
+"""
 
 VALID_ACTIONS = {
     # App
@@ -623,7 +670,7 @@ class ReactPlanner:
     MAX_STEPS = 15
 
     def __init__(self, auto_subscribe: bool = True):
-        self._llm = get_llm_engine("planner")["planner"]
+        self._llm = get_llm_engine("planner")
         self._window_manager = WindowManager()
         self._process_manager = ProcessManager()
 
@@ -656,35 +703,30 @@ class ReactPlanner:
         return self._parse_response(response)
     
     def _build_react_prompt(self,intent: Intent, context: Dict[str,Any], history:List[ReactStep]):
-        intent_str = f"""
-        Action: {intent.action}
-Target: {intent.target}
-Parameters: {intent.parameters}
-Original command: "{intent.raw_command}"
-Complexity: {intent.complexity}
-Domain: {intent.domain}"""
+        intent_str = (
+    f"USER INTENT:\n"
+    f"Action: {intent.action}\n"
+    f"Target: {intent.target}\n"
+    f"Parameters: {intent.parameters}\n"
+    f'Original command: "{intent.raw_command}"\n'
+    f"Complexity: {intent.complexity}\n"
+    f"Domain: {intent.domain}"
+)
+
 
         context_str = self._format_context(context)
 
         history_str = ""
         
         if history:
-            history_str = "HISTORY OF ACTOINS: \n"
+            history_str = "HISTORY OF ACTIONS: \n"
             for i, step in enumerate(history):
                 history_str +=f"\n--- Step {i+1} ---\n"
                 history_str +=f"Thought: {step.thought}\n"
                 history_str +=f"Action: {step.action}({step.parameters})\n"
 
                 if step.observation:
-                    obs = step.observation
-                    history_str +=f"Result: {'SUCCESS' if obs.success else 'FAILED'}\n"
-                    if obs.error:
-                        history_str +=f"Error: {obs.error}\n"
-                    if obs.result_data:
-                        preview = dict(list(obs.result_data.items())[:3])
-                        history_str +=f"Data: {preview}\n"
-                    if obs.foreground_window:
-                        history_str +=f"Current window: {obs.foreground_window}\n"
+                    history_str += step.observation.to_prompt_str() + "\n"
         return f"{intent_str}\n\n{context_str}\n\n{history_str}\n\nDecide the next action."
 
     def _parse_response(self, response: Dict)-> Optional[ReactStep]:
@@ -732,13 +774,13 @@ Domain: {intent.domain}"""
             except:
                 context["target_running"] = False
             
-        try:
-            window = self._window_manager.find_window(target)
-            context["target_window_found"] = window is not None
-            if window:
-                context["target_window_title"] = window.title[:50]
-        except:
-            context["target_window_found"] = False
+            try:
+                window = self._window_manager.find_window(target)
+                context["target_window_found"] = window is not None
+                if window:
+                    context["target_window_title"] = window.title[:50]
+            except:
+                context["target_window_found"] = False
 
         try:
             windows = self._window_manager.get_all_windows()[:5]
@@ -811,8 +853,34 @@ Domain: {intent.domain}"""
     def _build_system_prompt(self, intent: Intent = None) -> str:
         """Can pass intent for domain specific prompt for model.
            Currently it's set to a local prompt."""
-        action_catalog = ", ".join(sorted(VALID_ACTIONS))
-        return REACT_SYSTEM_PROMPT.replace("{action_catalog}", action_catalog)
+        # action_catalog = ", ".join(sorted(VALID_ACTIONS))
+        return REACT_SYSTEM_PROMPT.replace("{action_catalog}", ACTION_CATALOG)
+
+    def _on_intent(self, event) -> None:
+        """Handle INTENT_RECOGNIZED events."""
+        intent = event.data.get("intent")
+        if not intent:
+            print("No intent in event")
+            return
+        plan = self.create_plan(intent)
+        if plan and len(plan.steps) > 0:
+            emit(EventType.PLAN_CREATED,
+                source="ReactPlanner",
+                plan=plan, intent=intent,
+                steps_count=len(plan.steps))
+        else:
+            emit(EventType.PLAN_FAILED,
+                source="ReactPlanner",
+                intent=intent,
+                reason="Failed to create valid plan")
+    def _on_plan_failed(self, event) -> None:
+        """Handle PLAN_FAILED events — log for now, re-planning comes in Phase 2."""
+        data = event.data if hasattr(event, 'data') else {}
+        intent = data.get("intent")
+        error = data.get("error", "Unknown")
+        reason = data.get("reason", "")
+        print(f"[ReactPlanner] Plan failed: {reason or error}")
+        # Future: re-plan with observation history
 
 class TaskPlanner:
     def __init__(self, auto_subscribe:bool = True):
@@ -1122,11 +1190,10 @@ if __name__ == "__main__":
     planner = ReactPlanner(auto_subscribe=False)
     time.sleep(5)
     test_commands = [
-        "open brave",
+        "Open Notepad, type 'local planner test', then minimize it",
         "search for cats on youtube",
-        "type hello world",
-        "switch to notepad",
-        "open brave"
+        "Switch to Notepad, type 'hello from Mei', press Enter, then type today's date",
+        "Open Brave and search for llama.cpp quantization on YouTube"
     ]
 
     for cmd in test_commands:
