@@ -5,12 +5,12 @@ from datetime import datetime
 from ..core.task import ActionHandler, Plan, Step, Intent, StepStatus
 from ..core.config import ActionResult, VerifyResult, get_config
 from ..core.events import EventType, Event, emit, subscribe, get_event_bus
-
+from ..cognition.observation import get_observation_builder
 from ..core.state import AgentState, get_state_machine
 
 from .context import ExecutionContext
 from .toolspec import ToolSpec
-
+ 
 from .debug.logger import get_execution_logger
 
 # from .handlers.window import get_window_handlers
@@ -390,6 +390,20 @@ class PlanExecutor:
                             )
                 except Exception as e:
                     print(f"Verificatin error: {e}")
+            
+            """Producing observation data for the planner"""
+
+            builder = get_observation_builder()
+            obs = builder.build(
+                action=step.action,
+                parameters=step.parameters,
+                result=result,
+                verify_result=verify_result,
+                target_app=step.parameters.get('app_name') or step.parameters.get('query')
+            )
+
+            context.set_variable(f"observation_step{step_index}", obs)
+            context.set_variable('last_observation', obs)
 
             step.status = StepStatus.COMPLETED
             step.completed_at = datetime.now()
@@ -533,7 +547,7 @@ if __name__ == "__main__":
     print("-" * 40)                                                      
     actions = executor.list_actions()                                    
     for action in sorted(actions):                                       
-        handler = executor.get_handler(action)                           
+        handler = executor.get_tool(action)                           
         print(f"  {action:20} verify={handler.supports_verification}")   
                                                                          
     print("\nTest 2: Execute Single Action (wait)")                      

@@ -18,10 +18,67 @@ class Observation:
     success: bool = False
     result_data: Dict[str, Any] = field(default_factory=dict)
     error: Optional[str] = None
-    # Environment snapshot
+    method_used: str = ""
+
+    # From _verify ( if handler supports it ) 
+    verified: Optional[bool] = None
+    verify_confidence: float = 0.0
+    verify_reason: Optional[str] = None
+
+    # Environment Snapshot 
+    
     foreground_window: Optional[str] = None
     foreground_process: Optional[str] = None
+    
+    open_windows: List[str] = field(default_factory=list)
+    target_running: Optional[bool] = None # after launch/terminate
+    
+    # UI State collected only when relevent
+    focused_element: Optional[str] = None
+    focused_element_type: Optional[str] = None
+    focused_element_value: Optional[str] = None
 
+    # Visual only when planner requests
+    screen_text: Optional[str] = None
+    visible_elements: Optional[List[str]] = None
+
+    def to_prompt_str(self)-> str:
+        lines = []
+        lines.append(f"Result: {'SUCCESS' if self.success else 'FAILED'}")  
+        if self.result_data:
+            lines.append(f"Result data: {dict(list(self.result_data.items())[:3])}")
+        if self.error:
+            lines.append(f"Error: {self.error}")
+        if self.method_used:
+            lines.append(f"Method used: {self.method_used}") 
+        if self.verified is not None:
+            lines.append(f"Verified: {self.verified}"
+                         f"(confidence: {self.verify_confidence:.1f},"
+                         f"reason: {self.verify_reason})")
+        
+        if self.foreground_window:
+            lines.append(f"Current window: {self.foreground_window}"
+                         f"({self.foreground_process})")
+        
+        if self.open_windows:
+            lines.append(f"Open windows: {self.open_windows}")
+        if self.target_running:
+            lines.append(f"target_running: {self.target_running}")
+        
+        if self.target_running is not None:
+            lines.append(f"Target app running: {self.target_running}")
+        
+        if self.focused_element:
+            lines.append(f"Focused element: {self.focused_element}"
+                         f"[{self.focused_element_type}]"
+                         f"[{self.focused_element_value}]")
+        
+        if self.screen_text:
+            lines.append(f"Screen text: {self.screen_text[:200]}")
+        if self.visible_elements:
+            lines.append(f"Visible elements: {self.visible_elements}")
+        return "\n".join(lines)
+        
 @dataclass
 class ReactStep:
     """A single thought → action → observation turn."""
@@ -256,20 +313,21 @@ class VisualAnalysisResult:
 @dataclass
 class LLMConfig:
     """Language Model settings"""
-    # model_path: str = str(Path(__file__).parent.parent.parent /"models"/"qwen2.5-3b-instruct-q4_k_m.gguf")
-    context_length: int = 16384
-    max_tokens: int = 512
+    model_path: str = str(Path(__file__).parent.parent.parent /"models"/"qwen2.5-3b-instruct-q4_k_m.gguf")
+    context_length: int = 2500 
+    max_tokens: int = 256 
     temperature: float = 0.1
     threads: int = 16
     gpu_layers: int = -1
 
     """Model path's for intent and planner modules"""
     intent_model_path: str = str(Path(__file__).parent.parent.parent/"models"/"Phi-3.5-mini-instruct.Q5_K_M.gguf")
-    planner_model_path: str = str(Path(__file__).parent.parent.parent/"models"/"ToolACE-2-8B.Q4_K_M.gguf")
+    planner_model_path: str = str(Path(__file__).parent.parent.parent/"models"/"ToolACE-2-8B.Q3_K_S.gguf")
 
-    intent_gpu_layers: int = 0
-    planner_gpu_layers: int = 27
-    
+    intent_gpu_layers: int = 16
+    intent_context_length: int = 2500
+    planner_gpu_layers: int = 20
+    planner_context_length: int = 3072 #6144     
 @dataclass
 class ActionResult:
     success:bool
@@ -372,7 +430,8 @@ class AppCapabilities:
     undo_hotkey: Optional[str] = None
     supports_clipboard: bool = True
     custom_actions: Dict[str, str] = field(default_factory=dict)
-
+    has_save: bool = False
+    
 @dataclass
 class ConversationTurn:
     """Single exchange in conversation history."""
