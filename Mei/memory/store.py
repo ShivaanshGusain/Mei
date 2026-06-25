@@ -849,7 +849,7 @@ class MemoryStore:
                     0 if success else 1,                                   
                     duration_ms, duration_ms, duration_ms, duration_ms     
                 ))                                                         
-                                                                            
+                   
                                                                             
                                                                             
     def get_method_statistics(                                                

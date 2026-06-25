@@ -145,11 +145,8 @@ class WorkingMemory:
             self._app_capabilities_cache[app_name_lower] = capabilities
             return capabilities
         
-        capabilities = self._store(app_name_lower)
-
-        if capabilities:
-            self._app_capabilities_cache[app_name_lower] = capabilities
-            return capabilities
+        # TODO: When a DB-backed capabilities table exists,
+        # query self.store here and cache the result.
         
         return None
     
@@ -157,23 +154,24 @@ class WorkingMemory:
     
     def _load_predefined_capabilities(self, app_name: str) -> Optional[AppCapabilities]:
         """Load predefined capabilities from JSON or hardcoded."""
+        """
         predefined = {
-            "chrome.exe": AppCapabilities(
+             "chrome.exe": AppCapabilities(
                 has_search=True, search_hotkey="Ctrl+F",
                 has_undo=True, undo_hotkey="Ctrl+Z",
                 has_save=False
             ),
             "code.exe": AppCapabilities(
                 has_search=True, search_hotkey="Ctrl+F",
-                has_replace=True, replace_hotkey="Ctrl+H",
+                # has_replace=True, replace_hotkey="Ctrl+H",
                 has_undo=True, undo_hotkey="Ctrl+Z",
-                has_save=True, save_hotkey="Ctrl+S"
+                has_save=True, #save_hotkey="Ctrl+S"
             ),
             "notepad.exe": AppCapabilities(
                 has_search=True, search_hotkey="Ctrl+F",
-                has_replace=True, replace_hotkey="Ctrl+H",
+                # has_replace=True, replace_hotkey="Ctrl+H",
                 has_undo=True, undo_hotkey="Ctrl+Z",
-                has_save=True, save_hotkey="Ctrl+S"
+                has_save=True, #save_hotkey="Ctrl+S"
             ),
             "explorer.exe": AppCapabilities(
                 has_search=True, search_hotkey="Ctrl+F",
@@ -181,7 +179,8 @@ class WorkingMemory:
             ),
         }
         return predefined.get(app_name)
-
+        """
+        pass
 
     def _detect_document_path(self, window:WindowInfo) -> Optional[str]:
 
@@ -713,10 +712,11 @@ class WorkingMemory:
                             "parameters": step.parameters,
                             "description": step.description
                         })
-                    step_str = json.dumps(plan_steps_data, sort_keys=True)
-                    generated_hash = hashlib.md5(step_str.encode()).hexdigest()
+                    #step_str = json.dumps(plan_steps_data, sort_keys=True)
+                    #generated_hash = hashlib.md5(step_str.encode()).hexdigest()
 
-                    self._store.cache_plan(
+
+                    """self._store.cache_plan(
                         intent_pattern=pattern,
                         intent_action=intent.action,
                         intent_target=intent.target,
@@ -731,7 +731,7 @@ class WorkingMemory:
                         intent_action=intent.action,
                         intent_target=intent.target,
                         success=True
-                    )
+                    )"""
 
                 except Exception as e:
                     print(f"Failed to cache plan: {e}")
@@ -817,11 +817,14 @@ class WorkingMemory:
             )->int:
         
         intent_dict = {
-            'action':intent.action,
-            'target':intent.target,
-            'parameters':intent.parameters,
-            'confidence':intent.confidence
+            "action":       intent.action,
+            "target":       intent.target,
+            "parameters":   intent.parameters,
+            "confidence":   intent.confidence,
+            "complexity":   getattr(intent, "complexity", "multi_step"),
+            "domain":       getattr(intent, "domain", "unknown"),
         }
+
 
         if plan is not None:
             plan_dict = {
@@ -982,6 +985,17 @@ class WorkingMemory:
                    'session_id':self._session_id,
                    'session_active' : self._is_active
                    }
+        intent_pattern = self._build_intent_pattern(intent)
+        cached = self._store.get_cached_plan(intent_pattern, min_uses=1)
+        if cached:
+            context["cached_plan"] = {
+                "steps":        cached.get("plan_steps_json"),
+                "strategy":     cached.get("plan_strategy"),
+                "use_count":    cached.get("use_count"),
+                "success_rate": cached.get("success_count", 0) /
+                                max(cached.get("use_count", 1), 1),
+            }
+            return context
 
         if len(self._conversation_history) >1:
             recent = self._conversation_history[-4:-1] if len(self._conversation_history)>=4 else self._conversation_history[-1]
