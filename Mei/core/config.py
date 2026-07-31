@@ -322,12 +322,12 @@ class LLMConfig:
 
     """Model path's for intent and planner modules"""
     intent_model_path: str = str(Path(__file__).parent.parent.parent/"models"/"Phi-3.5-mini-instruct.Q5_K_M.gguf")
-    planner_model_path: str = str(Path(__file__).parent.parent.parent/"models"/"ToolACE-2-8B.Q3_K_S.gguf")
+    planner_model_path: str = str(Path(__file__).parent.parent.parent/"models"/"xLAM-2-1B-fc-r-Q4_0.gguf")
 
-    intent_gpu_layers: int = 16
+    intent_gpu_layers: int = 0
     intent_context_length: int = 2500
-    planner_gpu_layers: int = 20
-    planner_context_length: int = 3072 #6144     
+    planner_gpu_layers: int = -1
+    planner_context_length: int = 4064 #6144     
 @dataclass
 class ActionResult:
     success:bool

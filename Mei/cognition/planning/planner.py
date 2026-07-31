@@ -242,57 +242,8 @@ Response:
   "done": false
 }
 
-EXAMPLE 3 - "Type text"
-User intent:
-{
-  "action": "type",
-  "target": null,
-  "parameters": {"text": "hello world"}
-}
 
-Context:
-{
-  "foreground_window": "Notepad"
-}
-
-History:
-[]
-
-Response:
-{
-  "thought": "The user wants text entered into the current focused context. The next step is to type the provided text.",
-  "action": "type_text",
-  "parameters": {"text": "hello world"},
-  "description": "Type hello world into the current focused field.",
-  "done": false
-}
-
-EXAMPLE 4 - "Switch to a named window"
-User intent:
-{
-  "action": "focus",
-  "target": "notepad",
-  "parameters": {}
-}
-
-Context:
-{
-  "open_windows": ["Notepad", "Brave", "Visual Studio Code"]
-}
-
-History:
-[]
-
-Response:
-{
-  "thought": "The user wants the Notepad window. Since a matching window exists, the next step is to focus it.",
-  "action": "focus_window",
-  "parameters": {"query": "Notepad"},
-  "description": "Bring the Notepad window to the foreground.",
-  "done": false
-}
-
-EXAMPLE 5 - "Search on YouTube from scratch"
+EXAMPLE 3 - "Search on YouTube from scratch"
 User intent:
 {
   "action": "search",
@@ -1190,10 +1141,10 @@ if __name__ == "__main__":
     planner = ReactPlanner(auto_subscribe=False)
     time.sleep(5)
     test_commands = [
-        "Open Notepad, type 'local planner test', then minimize it",
-        "search for cats on youtube",
-        "Switch to Notepad, type 'hello from Mei', press Enter, then type today's date",
-        "Open Brave and search for llama.cpp quantization on YouTube"
+        # "Open Notepad, type 'local planner test', then minimize it",
+        # "search for cats on youtube",
+        # "Open Brave and search for llama.cpp quantization on YouTube",
+        "Open Discord application and go to the Programming's den channel"
     ]
 
     for cmd in test_commands:

@@ -82,6 +82,7 @@ class LLMEngine:
             return output["choices"][0]['text'].strip()
         except Exception as e:
             emit(EventType.ERROR, source=f"LLMEngine_{self._name}", error=str(e), operation="complete")
+            print(f"[{self._name}] chat() failed: {e}")
             return ""
         
     def chat(self, messages: List[Dict[str, str]], system_prompt: str = None, max_tokens: int = None, temperature: float = None)-> str:
@@ -109,6 +110,7 @@ class LLMEngine:
             return output["choices"][0]['message']['content'].strip()
         except Exception as e:
             emit(EventType.ERROR, source=f"LLMEngine_{self._name}", error=str(e), operation="chat")
+            print(f"[{self._name}] chat() failed: {e}")
             return ""
     
     def chat_json(self, messages: List[Dict[str, str]], system_prompt: str = None, max_retries: int = 2)->Optional[Dict]:
@@ -128,10 +130,12 @@ class LLMEngine:
                 json_str = self._extract_json(response)
                 if json_str:
                     try:
+                        print(json_str)
                         return json.loads(json_str)
                     except:
+                        print(f"[{self._name}] chat() failed: {json.JSONDecodeError}")
                         pass
-            
+            print("[LLM] ",response)
             if attempt < max_retries:
                 messages = messages + [
                     {"role": "assistant", "content": response},
@@ -139,6 +143,7 @@ class LLMEngine:
                 ]
 
         emit(EventType.ERROR, source=f"LLMEngine_{self._name}", error="Failed to get valid JSON", operation="chat_json")
+        print(f"[{self._name}] chat() failed: Failed to get valid JSON")
         return None
     
     def _extract_json(self,text:str)->Optional[str]:
