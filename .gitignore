@@ -21,3 +21,6 @@ logs
 Mei/perception/Visual/OmniParser/weights/
 Mei/perception/Visual/OmniParser/saved_models/
 known_apps.csv
+llama_cpp_python-0.3.20+cuda12.1.sm86.ampere-py3-none-win_amd64.whl
+LLM_run_test.py
+Test_temp.py

@@ -396,6 +396,7 @@ def extract_intent(text:str)->Optional[Intent]:
     return get_intent_extractor().extract(text)
 
 if __name__ =="__main__":
+
     extractor = IntentExtractor(auto_subscribe=False)
     
     test_commands = [
@@ -422,3 +423,5 @@ if __name__ =="__main__":
             print(f"Domain: {intent.domain}")
         else:
             print("Failed")
+    engine = get_llm_engine("intent")
+    extractor._llm.print_memory_usage()

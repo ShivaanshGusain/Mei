@@ -1,3 +1,17 @@
+""" Computation cost check """
+import tracemalloc
+try:
+    import pynvml
+    pynvml.nvmlInit()
+    VRAM_TRACKING = True
+except ImportError:
+    VRAM_TRACKING = False
+    print("pynvml not installed. Skipping VRAM tracking.")
+
+# Start tracking System RAM immediately when the module loads
+tracemalloc.start()
+#---------------------
+
 from llama_cpp import Llama
 
 from ...core.config import get_config
@@ -7,6 +21,8 @@ from typing import List, Dict, Optional, Any
 import threading
 import json
 import os
+
+
 
 
 class LLMEngine:
@@ -177,7 +193,26 @@ class LLMEngine:
             gc.collect()
             
             emit(EventType.LLM_UNLOADED, source = "LLMEngine")
-    
+
+    """ ------------------Memory check------------------"""        
+    def print_memory_usage(self) -> None:
+        """Calculates and prints the peak RAM and current VRAM usage."""
+        current_ram, peak_ram = tracemalloc.get_traced_memory()
+        
+        print("\n" + "=" * 40)
+        print(f"💻 MEMORY CONSUMPTION REPORT [{self._name}]")
+        print("=" * 40)
+        print(f"Peak System RAM: {peak_ram / (1024 * 1024):.2f} MB")
+        
+        if VRAM_TRACKING:
+            try:
+                # Get handle for the first GPU (index 0)
+                gpu_handle = pynvml.nvmlDeviceGetHandleByIndex(0) 
+                memory_info = pynvml.nvmlDeviceGetMemoryInfo(gpu_handle)
+                print(f"Total GPU VRAM Used: {memory_info.used / (1024 * 1024):.2f} MB")
+            except Exception as e:
+                print(f"Failed to read VRAM: {e}")
+        print("=" * 40 + "\n")
 # _engine_instance:Optional[LLMEngine] = None
 
 _engines: Dict[str, LLMEngine] = {}

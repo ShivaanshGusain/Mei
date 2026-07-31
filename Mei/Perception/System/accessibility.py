@@ -503,6 +503,13 @@ class UIAutomationManager:
         
         return search(window)
 
+_accessibility_manager: Optional[UIAutomationManager] = None
+
+def get_accessibility_manager()->UIAutomationManager:
+    global _accessibility_manager
+    if _accessibility_manager is None:
+        _accessibility_manager = UIAutomationManager()
+    return _accessibility_manager
 
 # ===== TEST BLOCK =====
 if __name__ == "__main__":

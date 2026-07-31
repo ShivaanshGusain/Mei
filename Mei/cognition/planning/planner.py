@@ -1141,9 +1141,9 @@ if __name__ == "__main__":
     planner = ReactPlanner(auto_subscribe=False)
     time.sleep(5)
     test_commands = [
-        # "Open Notepad, type 'local planner test', then minimize it",
-        # "search for cats on youtube",
-        # "Open Brave and search for llama.cpp quantization on YouTube",
+        "Open Notepad, type 'local planner test', then minimize it",
+        "search for cats on youtube",
+        "Open Brave and search for llama.cpp quantization on YouTube",
         "Open Discord application and go to the Programming's den channel"
     ]
 
@@ -1167,3 +1167,4 @@ if __name__ == "__main__":
                 print(f" {step.description}")
         else:
             print(" Planning failed")
+    planner._llm.print_memory_usage()

@@ -1,9 +1,13 @@
 from typing import Optional, Dict, Any, List
 from datetime import datetime
+import time
 
 from .events import EventType, Event, emit, subscribe
+from ..action.executor import get_executor
+
 from ..cognition.nlu.intent import extract_intent, get_intent_extractor
 from ..cognition.planning.planner import generate_plan, get_planner, ReactPlanner
+from ..cognition.observation import get_observation_builder
 from ..perception.System.windows import WindowManager
 from  .config import Observation
 
@@ -12,6 +16,7 @@ from .task import Intent, Plan
 _pipeline_active: bool = False
 _processed_count: int = 0
 _last_processed: Optional[str] = None
+
 
 
 def _on_transcription_complete(event: Event) -> None:
@@ -55,18 +60,23 @@ def _on_transcription_complete(event: Event) -> None:
         )
         return
 
-    print(f"[Pipeline] Intent: action={intent.action}, target={intent.target}, confidence={intent.confidence:.2f}")
+    print(f"[Pipeline] Intent: action={intent.action}, target={intent.target}, "
+            f"confidence={intent.confidence:.2f}, complexity={intent.complexity}, "
+            f"domain={getattr(intent, 'domain', 'unknown')}")
 
     # ── Step 2: Check confidence threshold ──
     if intent.action == "unknown":
         print(f"[Pipeline] Could not understand: \"{text}\"")
+
         return
 
     if intent.confidence < 0.3:
         print(f"[Pipeline] Confidence too low ({intent.confidence:.2f}), ignoring.")
         return
 
-        # ── Step 3: Generate Plan ──
+
+    _processed_count += 1
+        
     try:
         plan = generate_plan(intent)
     except Exception as e:
@@ -91,6 +101,18 @@ def _on_transcription_complete(event: Event) -> None:
 
     _processed_count += 1
 
+    complexity = getattr(intent, 'complexity', 'multi-step')
+
+    if complexity == 'teaching':
+        #[TODO] Implement teaching for Mei
+        # _handle_teaching(intent,text)
+        pass
+
+    elif complexity == 'simple':
+        _execute_simple(intent)
+    
+    else:
+        _execute_loop(intent)
     # ── Step 4: Emit PLAN_CREATED → Executor picks it up ──
     emit(
         EventType.PLAN_CREATED,
@@ -99,7 +121,29 @@ def _on_transcription_complete(event: Event) -> None:
         intent=intent
     )
 
+def _execute_simple(intent: Intent) -> None:
+    """Execution for simple actions,\n
+       Falls back to ReAct if fails"""
+    executor = get_executor()
+    action_name = intent.action
 
+    if not action_name:
+        print(f"[Pipeline] No direct mapping simple intent: {intent.action}")
+        _execute_loop(intent)
+        return
+
+    result = executor.execute_single_action(action=action_name,parameters=intent.parameters)
+
+    if result.success:
+        print("Action completed")
+        emit(EventType.PLAN_COMPLETED, source='Pipeline',
+             intent=intent, step_completed = 1, duration_ms = 0)
+    
+    else:
+        print(f"Failed execution")
+        _execute_loop(intent)
+
+    
 def _on_plan_completed(event: Event) -> None:
     """Called when executor finishes a plan successfully."""
     data = event.data if hasattr(event, 'data') and isinstance(event.data, dict) else {}
@@ -125,16 +169,165 @@ def _on_plan_failed(event: Event) -> None:
 
     print(f"\n[Pipeline] ✗ Failed: {action} → {target} — {error} ({duration:.0f}ms)")
 
-def _execute_loop(intent:Intent)-> None:
+def _execute_loop(intent: Intent) -> None:
     """Run the full ReAct loop for a given input."""
+
     planner = get_planner()
     executor = get_executor()
+    obs_builder = get_observation_builder()
 
     context = planner._gather_context(intent)
     history: List[ReactStep] = []
+    start_time = time.time()
+
+    print(f"[Pipeline] Starting ReAct loop for: {intent.action} → {intent.target}")
 
     for step_num in range(ReactPlanner.MAX_STEPS):
+
+        # ── Thought: ask planner for the next step ──
         step = planner.next_step(intent, context, history)
+
+        if step is None:
+            elapsed = (time.time() - start_time) * 1000
+            print(f"[Pipeline] Planner returned None at step {step_num + 1}.")
+            emit(EventType.PLAN_FAILED, source='Pipeline',
+                 intent=intent, reason="Planner returned no step",
+                 duration_ms=elapsed)
+            return
+
+        print(f"[Pipeline] Step {step_num + 1} | Thought: {getattr(step, 'thought', '-')}")
+
+        # ── Done signal ──
+        if step.done:
+            elapsed = (time.time() - start_time) * 1000
+            print(f"Pipeline ReAct loop complete in {step_num + 1} step(s) "
+                  f"({elapsed:.0f}ms)")
+            emit(EventType.PLAN_COMPLETED, source='Pipeline',
+                 intent=intent, steps_completed=len(history),
+                 duration_ms=elapsed)
+            return
+
+        # ── Action: execute ──
+        print(f"[Pipeline] Step {step_num + 1} | Action: {step.action} "
+              f"params={step.parameters}")
+        result = executor.execute_single_action(step.action, step.parameters)
+
+        # ── Optional verification ──
+        verify_result = None
+        handler = executor.get_tool(step.action)
+        if handler and handler.supports_verification:
+            try:
+                exec_ctx = executor._current_context
+                verify_result = handler.verify_fn(
+                    step.parameters, exec_ctx, result
+                )
+            except Exception as ve:
+                print(f"[Pipeline] Verification error: {ve}")
+
+        # ── Observation: build and attach ──
+        observation = obs_builder.build(
+            action=step.action,
+            parameters=step.parameters,
+            result=result,
+            verify_result=verify_result,
+            target_app=step.parameters.get('query') or intent.target
+        )
+        step.observation = observation
+        history.append(step)
+
+        status = "SUCCESS" if observation.success else "FAIL"
+        print(f"Pipeline Step {step_num + 1} | Observation: {status} "
+              f"window=({observation.foreground_window})")
+
+        # ── Gather fresh context for next step ──
+        context = planner._gather_context(intent)
+
+        # ── Early abort: too many consecutive failures ──
+        recent_failures = sum(
+            1 for s in history[-3:] if not s.observation.success
+        )
+        if recent_failures >= 3:
+            elapsed = (time.time() - start_time) * 1000
+            emit(EventType.PLAN_FAILED, source='Pipeline',
+                 intent=intent,
+                 reason="3 consecutive failures — aborting loop",
+                 duration_ms=elapsed)
+            return
+
+    # ── Max steps exceeded ──
+    elapsed = (time.time() - start_time) * 1000
+    emit(EventType.PLAN_FAILED, source='Pipeline',
+         intent=intent,
+         reason=f"Exceeded {ReactPlanner.MAX_STEPS} steps",
+         duration_ms=elapsed)
+
+"""def _execute_loop(intent:Intent)-> None:
+    planner = get_planner()
+    executor = get_executor()
+    obs_builder = get_observation_builder()
+
+    context = planner._gather_context(intent)
+    history: List[ReactStep] = []
+    start_time = time.time()
+
+    for step_num in range(ReactPlanner.MAX_STEPS):
+        # planner' sinput for the next step
+        step = planner.next_step(intent, context, history)
+
+        if step is None:
+            emit(EventType.PLAN_FAILED, source="Pipeline",
+                 intent= intent, reason="Planner returned no step")
+            return
+        
+        if step.done:
+            elapsed = (time.time() - start_time)* 1000
+            emit(EventType.PLAN_COMPLETED, source="Pipeline",
+                 intent= intent, steps_completed=len(history),
+                 duration_ms=elapsed)
+            return
+        
+        # Execute the step
+        result = executor.execute_single_action(
+            step.action, step.parameters
+        )
+
+        # Get verify result
+        verify_result = None
+        handler = executor.get_tool(step.action)
+        if handler and handler.supports_verification:
+            try:
+                exec_context = executor._current_context
+                verify_result = handler.verify_fn(
+                    step.parameters, exec_context, result
+                )
+            except:
+                pass
+        
+        observation = obs_builder.build(
+            action=step.action,
+            parameters=step.parameters,
+            result=result,
+            verify_result=verify_result,
+            target_app=step.parameters.get('query') 
+        )
+        step.observation = observation
+
+        history.append(step)
+
+        print(f"Step {step_num + 1}: {step.action} ->"
+              f"{'SUCCESS' if observation.success else 'FAIL'}"
+              f"({observation.foreground_window})")
+        
+        context = planner._gather_context(intent)
+    
+    elapsed = (time.time() - start_time) * 1000
+    emit(EventType.PLAN_FAILED, source="Pipeline",
+         intent= intent,
+         reason=f"Exceeded { ReactPlanner.MAX_STEPS} steps",
+         duration_ms = elapsed)
+    
+"""
+"""        step = planner.next_step(intent, context, history)
         
         if step is None:
             emit(EventType.PLAN_FAILED, source= "Pipeline",
@@ -177,7 +370,7 @@ def _execute_loop(intent:Intent)-> None:
     
     emit(EventType.PLAN_FAILED, source="Pipeline",
          intent=intent, reason=f"Exceeded {ReactPlanner.MAX_STEPS} steps")
-
+"""
 #[TODO] subscribe to appropriate functions for ReAct loop
 
 def start_pipeline() -> None:

@@ -41,3 +41,43 @@ Memory/teaching tools:
 
 remember_pattern, load_pattern, to interact with your memory store / cached plans, especially when the user says “do it like last time”.
 
+------------
+
+MAIN- 
+Improve tools, create inference pipeline for tools.
+Create prompts for each domain 
+
+Later train the slms for better outputs.
+
+Tools completed - 
+app ( open close only ) 
+window 
+
+
+Tools to implement - 
+web 
+System
+
+Tools to refactor and improve -
+input 
+
+Tools to remove - 
+utiliy
+
+------------
+
+WORKING - 
+Fixing memory, current to fix its call in planner module.
+
+-----------
+To Remember - 
+Intent module's outputs are less in quality. ( can intent be removed completely ) 
+tested the planning module, still misses some commands for some reason.
+
+Implement the tools next then planning ( including the teaching module )  improve and then think of refactoring the memory entirely.
+Then think of making the model learn.
+
+-----------
+
+Make planner stop the running intent module in the background to stop for moment while planner execuetes stuff.
+
