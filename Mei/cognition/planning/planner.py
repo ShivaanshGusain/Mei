@@ -57,7 +57,25 @@ UTILITY:
 COMPLETION:
   none()
     Signal that the task is complete. Set done=true.
-"""
+WEB (requires browser with --remote-debugging-port=9222):
+  web_navigate(url: str, new_tab?: bool)
+    Navigate to a URL in the browser.
+    
+  web_click(selector: str, selector_type?: "text"|"role"|"placeholder"|"label"|"css")
+    Click a web page element.
+    
+  web_type(selector: str, selector_type?: str, text: str, clear_first?: bool, submit?: bool)
+    Type text into a web input field. submit=true presses Enter after.
+    
+  web_get_state(extract_type?: "text"|"html"|"links"|"inputs"|"structured")
+    Get current page content. The planner's "eyes" for the web.
+    
+  web_wait_for(selector: str, selector_type?: str, state?: "visible"|"hidden", timeout_ms?: int)
+    Wait for an element to appear/disappear.
+    
+  web_scroll(direction: "up"|"down", amount?: int)
+    Scroll the web page. Default 800px.
+    """
 
 VALID_ACTIONS = {
     # App
@@ -82,14 +100,12 @@ VALID_ACTIONS = {
     "wait",
 
     # Web / browser
-    "navigate_url",
-    "search_web",
+    "web_navigate",
     "web_click",
     "web_type",
+    "web_get_state",
+    "web_wait_for",
     "web_scroll",
-    "web_keypress",
-    "close_tab",
-    "switch_tab",
 
     # File / system
     "open_path",
@@ -125,9 +141,10 @@ ACTIONS_BY_DOMAIN = {
         "type_text", "hotkey", "click", "scroll", "find_element"
     },
     "web": {
-        "navigate_url", "search_web", "web_click", "web_type",
-        "web_scroll", "web_keypress", "close_tab", "switch_tab"
+    "web_navigate", "web_click", "web_type",
+    "web_get_state", "web_wait_for", "web_scroll",
     },
+
     "file": {
         "open_path", "create_file", "create_folder", "move_file",
         "delete_file", "rename_file"
@@ -154,7 +171,7 @@ THINK step-by-step:
 2. What was the result of the last action? (review observation)
 3. What should I do next to achieve the user's goal?
 4. Is the goal already achieved? If yes, set done=true.
-
+5. Does this action requires opening of application.
 AVAILABLE ACTIONS:
 {action_catalog}
 
@@ -1141,10 +1158,10 @@ if __name__ == "__main__":
     planner = ReactPlanner(auto_subscribe=False)
     time.sleep(5)
     test_commands = [
-        "Open Notepad, type 'local planner test', then minimize it",
+        # "Open Notepad, type 'local planner test', then minimize it",
         "search for cats on youtube",
         "Open Brave and search for llama.cpp quantization on YouTube",
-        "Open Discord application and go to the Programming's den channel"
+        # "Open Discord application and go to the Programming's den channel"
     ]
 
     for cmd in test_commands:

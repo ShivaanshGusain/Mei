@@ -26,7 +26,7 @@ list_files, open_folder, create_file_or_folder, read_file,
 
 maybe get_system_info (battery, network, etc.) depending on your goals.
 
-Web tools (CDP / Playwright later):
+Web tools (CDP / Playwright):
 
 
 web_navigate, web_click, web_type, web_scroll, web_get_state, web_keypress, web_close_tab, web_wait_for.
@@ -81,3 +81,7 @@ Then think of making the model learn.
 
 Make planner stop the running intent module in the background to stop for moment while planner execuetes stuff.
 
+# User starts Brave/Chrome with:
+brave.exe --remote-debugging-port=9222
+# or
+chrome.exe --remote-debugging-port=9222

@@ -3,6 +3,8 @@ from .app import register_app_tools
 from .input import register_input_tools
 from .navigation import get_navigation_handlers, NAVIGATION_HANDLERS
 from .utility import get_util_handers, UTIL_HANDLERS
+from .web import register_web_tools
+
 """
 def get_all_handlers():
     #Get instances of all handlers.
@@ -31,7 +33,7 @@ def register_all_tools(executor) -> None:
         register_input_tools(executor)
     except Exception as e:
         print(f"Failed to register input tools: {e}")
-    e
+    
     try:
         register_web_tools(executor)
     except Exception as e:

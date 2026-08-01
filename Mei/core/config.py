@@ -89,6 +89,22 @@ class ReactStep:
     done: bool = False
     observation: Optional[Observation] = None
 
+"""——————————————WEB——————————————"""
+
+@dataclass
+class WebConfig:
+    """Web/Browser automation settings"""
+    cdp_url: str = "http://localhost:9222"
+    default_timeout_ms: int = 10000 # 10s for navigation
+    action_timeout_ms: int = 3000   # 3s for clicks/waits
+    headless: bool = False
+
+    max_page_text_length: int = 5000 # truncate web_get_state output
+    screenshot_on_state: bool = False# whether web_get_state captures screenshot
+
+
+
+
 
 @dataclass
 class AudioConfig:
@@ -588,6 +604,8 @@ class Config:
     reactstep: ReactStep = field(default_factory=ReactStep)
     observation: Observation = field(default_factory=Observation)
 
+    web: WebConfig = field(default_factory=WebConfig)
+    
     audio: AudioConfig = field(default_factory=AudioConfig)
     knownapps: KnownApps = field(default_factory= KnownApps)
     llm: LLMConfig = field(default_factory=LLMConfig)
