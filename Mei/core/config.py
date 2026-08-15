@@ -1,3 +1,4 @@
+from __future__ import annotations
 import os
 import yaml 
 from dataclasses import dataclass, field
@@ -103,7 +104,16 @@ class WebConfig:
     screenshot_on_state: bool = False# whether web_get_state captures screenshot
 
 
-
+"""——————————————System-Shell——————————————"""
+@dataclass
+class ManagedProcess:
+    """A background process tracked by the manager."""
+    pid: int
+    command: str
+    process: 'subprocess.Popen'
+    started_at: datetime = field(default_factory=datetime.now)
+    log_buffer: 'deque' = field(default_factory=lambda:'deque'(maxlen=500))
+    _reader_thread: Optional['threading.Thread'] = field(default=None, repr=False)
 
 
 @dataclass
@@ -350,6 +360,7 @@ class ActionResult:
     data: Dict[str,Any]  = field(default_factory= dict)
     error:Optional[str] = None
     method_used: str   = 'unknown'
+    error_code: Optional[str]= None       # machine-readable: "permission_denied", "not_found", "timeout", "blocked", etc
 
 @dataclass
 class VerifyResult:

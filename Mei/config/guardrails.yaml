@@ -1,0 +1,194 @@
+# Mei Guardrails Configuration
+# This file MUST be signed with the admin's Ed25519 private key.
+# Signature: Mei/config/guardrails.yaml.sig
+
+version: 1                     # Monotonically increasing. Rollback protection.
+
+# ═══════════════════════════════════════════════════
+# COMMAND ALLOWLIST
+# Only these executables may be invoked by run_shell_command
+# and start_background_process. Everything else is rejected.
+# ═══════════════════════════════════════════════════
+allowed_executables:
+  # ── Development ──
+  - python
+  - python3
+  - pip
+  - npm
+  - npx
+  - node
+  - yarn
+  - pnpm
+  - git
+  - docker
+  - docker-compose
+  
+  # ── Build / Task runners ──
+  - make
+  - cmake
+  - cargo
+  - go
+  - javac
+  - java
+  - mvn
+  - gradle
+  
+  # ── Utilities ──
+  - echo
+  - cat          # type on Windows, but shlex resolves
+  - type
+  - dir
+  - ls
+  - find
+  - findstr
+  - grep
+  - where
+  - which
+  - ping
+  - curl
+  - wget
+  
+  # ── Process management ──
+  - pm2
+  - uvicorn
+  - gunicorn
+  - flask
+  - pytest
+  - mypy
+  - ruff
+  - black
+  - isort
+
+# ── Shell metacharacters that ALWAYS cause rejection ──
+# Even if the executable is allowlisted, these in the raw
+# command string cause immediate rejection.
+blocked_shell_operators:
+  - "&&"
+  - "||"
+  - ";"
+  - "`"           # backtick subshell
+  - "$("          # command substitution
+  - ">>"          # append redirect (allowed only in explicit patterns below)
+  - ">"           # redirect (allowed only in explicit patterns below)
+  - "<"           # input redirect
+  - "|"           # pipe
+
+# ── Exceptions: allowed chaining patterns ──
+# These exact patterns are permitted despite containing operators.
+# Matched literally, not as regex.
+allow_chaining: true    # if true, '&&' is permitted ONLY between two
+                        # independently-allowed list segments
+                        # All other operations (;, |, `,... )
+                        # are always blocked, chaining or not.
+
+# Executable is on allowed_executables, but these specific flags/subcommands
+# are additionally blocked because they enable arbitrary code execution
+# or filesystem escape even from an "allowed" binary.
+
+
+restricted_flags:
+  python:  ["-c", "-m", "--command"]
+  python3: ["-c", "-m", "--command"]
+  node:    ["-e", "--eval", "-p", "--print"]
+  docker:  ["-v", "--mount", "--privileged"]
+  git:     ["--upload-pack", "--exec"]     # can invoke arbitrary binaries
+
+# allowed_chain_patterns:
+#   - "npm run"          # npm run start, npm run dev, etc.
+#   - "npm install"
+#   - "pip install"
+#   - "pip install -r"
+#   - "docker compose"
+#   - "git add . && git commit"    # common dev workflow
+
+# ═══════════════════════════════════════════════════
+# PATH SANDBOXING
+# Writes/deletes are ONLY allowed inside these roots.
+# Reads are unrestricted (except binary filtering).
+# ═══════════════════════════════════════════════════
+allowed_write_roots:
+  - "C:\\Users\\Asus\\Projects"
+  - "D:\\Projects"
+
+# ── Always blocked for writes, even inside allowed roots ──
+protected_paths:
+  - "C:\\Windows"
+  - "C:\\Program Files"
+  - "C:\\Program Files (x86)"
+
+# ═══════════════════════════════════════════════════
+# FILE SEARCH / READ FILTERING
+# ═══════════════════════════════════════════════════
+binary_extensions:
+  - .exe
+  - .dll
+  - .bin
+  - .obj
+  - .o
+  - .so
+  - .dylib
+  - .png
+  - .jpg
+  - .jpeg
+  - .gif
+  - .bmp
+  - .ico
+  - .webp
+  - .svg
+  - .mp3
+  - .mp4
+  - .avi
+  - .mkv
+  - .wav
+  - .flac
+  - .zip
+  - .tar
+  - .gz
+  - .7z
+  - .rar
+  - .pdf
+  - .doc
+  - .docx
+  - .xls
+  - .xlsx
+  - .pyc
+  - .pyd
+  - .whl
+  - .db
+  - .sqlite
+  - .sqlite3
+
+skip_directories:
+  - .git
+  - __pycache__
+  - node_modules
+  - .venv
+  - venv
+  - env
+  - .env
+  - .tox
+  - .mypy_cache
+  - .pytest_cache
+  - dist
+  - build
+  - .next
+  - .nuxt
+  - coverage
+  - .idea
+  - .vs
+  - .vscode
+
+# ═══════════════════════════════════════════════════
+# LIMITS
+# ═══════════════════════════════════════════════════
+limits:
+  max_shell_output_chars: 10000
+  max_file_read_lines: 500
+  max_search_results: 50
+  max_list_entries: 200
+  max_concurrent_processes: 3
+  max_shell_timeout_seconds: 120
+  max_download_size_mb: 500
+  early_output_wait_seconds: 2.0
+  max_log_lines: 500
+  list_children_cap: 100         # stop counting children past this

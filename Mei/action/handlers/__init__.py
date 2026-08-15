@@ -4,6 +4,7 @@ from .input import register_input_tools
 from .navigation import get_navigation_handlers, NAVIGATION_HANDLERS
 from .utility import get_util_handers, UTIL_HANDLERS
 from .web import register_web_tools
+from .system import register_system_tools
 
 """
 def get_all_handlers():

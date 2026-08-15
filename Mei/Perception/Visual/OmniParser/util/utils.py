@@ -19,6 +19,11 @@ import numpy as np
 from matplotlib import pyplot as plt
 import easyocr
 from paddleocr import PaddleOCR
+
+# Muting the unnecessary logs
+
+logging.getLogger("ppocr").setLevel(logging.ERROR)
+
 reader = easyocr.Reader(['en'])
 paddle_ocr = PaddleOCR(
     lang='en',  # other lang also available

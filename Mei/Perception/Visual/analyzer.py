@@ -4,7 +4,7 @@ import sys
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 # Gives - .../Mei/perception/Visual
 
-OMNIPARSER_DIR = os.path.join(CURRENT_DIR,"OmniParser")
+OMNIPARSER_DIR = os.path.join(CURRENT_DIR,"Omniparser_try_fix/OmniParser")
 
 if OMNIPARSER_DIR not in sys.path:
     sys.path.insert(0,OMNIPARSER_DIR)
@@ -43,7 +43,7 @@ from ...core.config import get_config,Screenshot, VisualElement, VisualAnalysisR
 from ...core.events import emit, subscribe, EventType
 
 try:
-    from .OmniParser.util.utils import get_yolo_model, get_caption_model_processor, get_som_labeled_img,check_ocr_box
+    from .Omniparser_try_fix.OmniParser.util.utils import get_yolo_model, get_caption_model_processor, get_som_labeled_img,check_ocr_box
     OMNIPARSER_AVAILABLE = True
 except ImportError as e:
     print(f"Omniparser Import failed")
@@ -446,8 +446,27 @@ if __name__ == '__main__':
 
     
     if result.annotated_image:
-        result.annotated_image.save("test_annotated.png")
-        print("Saved image test_annotated.png")
+        print(type(result), type(result.annotated_image))
+        
+        if isinstance(result.annotated_image, str):
+            import base64
+            
+            # string has a data URI prefix (e.g., "data:image/png;base64,..."), strip it
+            b64_string = result.annotated_image
+            if b64_string.startswith("data:image"):
+                b64_string = b64_string.split(",")[1]
+                
+            # Decode the base64 string back into image bytes
+            image_bytes = base64.b64decode(b64_string)
+            
+            # Write the bytes directly to a PNG file
+            with open("test_annotated.png", "wb") as f:
+                f.write(image_bytes)
+                
+            print("Saved base64 image to test_annotated.png")
+        else:
+            result.annotated_image.save("test_annotated.png")
+            print("Saved PIL image to test_annotated.png")
 
     queries = ['Start', "PROBLEMS", 'SEARCH']
     for query in queries:

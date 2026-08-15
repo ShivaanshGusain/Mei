@@ -1,5 +1,9 @@
+from __future__ import annotations
+from typing import Dict, Any, Tuple, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..executor import PlanExecutor
 import time
-from typing import Dict, Any, Tuple, Optional
 from datetime import datetime
 
 from ...core.task import ActionHandler
@@ -11,7 +15,6 @@ from ...perception.Visual.screen import ScreenCapture
 from ...perception.Visual.analyzer import get_visual_analyzer
 
 import pyautogui
-from ..executor import PlanExecutor
 from ..context import ExecutionContext
 from ...memory.store import get_memory_store
 pyautogui.FAILSAFE = True

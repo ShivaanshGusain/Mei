@@ -1,5 +1,9 @@
-from typing import Dict, Any, Tuple, Optional
+from __future__ import annotations
+from typing import Dict, Any, Tuple, Optional, TYPE_CHECKING
 
+if TYPE_CHECKING:
+    from ..executor import PlanExecutor
+    
 from ...core.task import ActionHandler
 from ...core.config import ActionResult, VerifyResult, WindowInfo,ElementReference
 from ...perception.System.windows import get_window_manager
@@ -9,7 +13,6 @@ from ...perception.System.accessibility import UIAutomationManager, UIElement
 from ...perception.Visual.screen import ScreenCapture
 from ...perception.Visual.analyzer import get_visual_analyzer, VisualElement
 from ...memory.store import get_memory_store
-from ..executor import PlanExecutor
 
 import time
 import win32gui
