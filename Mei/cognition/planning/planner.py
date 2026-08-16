@@ -916,72 +916,24 @@ class TaskPlanner:
     
     def _try_cached_plan(self, intent:Intent)->Optional[Plan]:
         
-        from ...memory.store import get_memory_store
+        from ...memory.graph import find_matching_goal, get_procedure
         import json
-
-        pattern = self._build_intent_pattern(intent)
-        print(f"Checking plan cache for pattern: {pattern}")
-
-        try:
-            store = get_memory_store()
-            cached = store.get_cached_plan(
-                intent_pattern= pattern,
-                min_success_rate=0.7,
-                min_uses= 2
-            )
-
-            if not cached:
-                print("No cached plan found")
-                return None
-            
-            steps_data = cached.get('plan_steps_json')
-
-            if isinstance(steps_data, str):
-                steps_data = json.load(steps_data)
-
-            if not steps_data or not isinstance(steps_data,list):
-                print("Cached plan has no valid steps")
-                return None
-            
-            steps = []
-
-            timestamp = int(time.time()*1000)
-
-            for i,step_data in enumerate(steps_data):
-                if not isinstance(step_data, dict):
-                    continue
-
-                action = step_data.get('action', "")
-                if not action or action not in VALID_ACTIONS:
-                    print("Cached plan has invalid action: {action}")
-
-                step = Step(
-                    id=f"cached_{i}_{timestamp}",
-                    action=action,
-                    parameters=step_data.get("parameters", {}),
-                    description=step_data.get("description", ""),
-                    status=StepStatus.PENDING
-                )    
-
-                steps.append(step)
-
-            if not steps:
-                return None
-            
-            plan = Plan(
-                steps=steps,
-                strategy=cached.get("plan_strategy", "cached"),
-                reasoning=f"Cached plan (used {cached.get('use_count', 0)} times, "
-                          f"success rate: {cached.get('success_count', 0)}/{cached.get('use_count', 0)})",
-                created_at=datetime.now()
-            )
-
-            print(f"Found cached plan with {len(steps)} steps")
-            return plan
-        
-        except Exception as e:
-            print(f"Error checking plan cache: {e}")
+        match = find_matching_goal(intent.raw_command, threshold=0.85)
+        if not match:
             return None
+        actions = get_procedure(match['id'])
+        if not actions:
+            return None
+        # Build Plan from cached actions (same as pipeline bypass)
+        steps = [
+            Step(id=f"cached_{i}", action=a['tool_name'],
+                parameters=json.loads(a.get('parameters_json') or '{}'),
+                description=f"Cached: {a['tool_name']}")
+            for i, a in enumerate(actions)
+        ]
+        return Plan(steps=steps, strategy="procedural_cache",
+                    reasoning=f"Graph match (conf={match['confidence']:.2f})")
+
         
     def create_plan(self, intent: Intent)->Optional[Plan]:
         print(f"Creating plan for: {intent.action}->{intent.target}")

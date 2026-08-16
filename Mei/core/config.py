@@ -79,7 +79,8 @@ class Observation:
         if self.visible_elements:
             lines.append(f"Visible elements: {self.visible_elements}")
         return "\n".join(lines)
-        
+
+
 @dataclass
 class ReactStep:
     """A single thought → action → observation turn."""
@@ -89,6 +90,27 @@ class ReactStep:
     description: str = ""
     done: bool = False
     observation: Optional[Observation] = None
+
+"""——————————————Kuzu Memory——————————————"""
+
+
+@dataclass
+class KuzuMemoryConfig:
+    database_path : str = "data/kuzu_memory"
+    embedding_model : str = "all-MiniLM-L6-v2"
+    bypass_confidence_threshold : float = 0.92
+    enable_graph_memory: bool = True
+
+
+"""——————————————Old Memory——————————————"""
+
+@dataclass
+class MemoryConfig:
+    """Memory settings"""
+    database_path: str = "data/kuzu_memory"
+    max_episodic_entries: int = 10000
+    similarity_threshold: float = 0.7
+
 
 """——————————————WEB——————————————"""
 
@@ -587,12 +609,6 @@ class SuccessPattern:
     best_method:List[Dict[str,Any]]
     avg_duration_ms:float
     
-@dataclass
-class MemoryConfig:
-    """Memory settings"""
-    database_path: str = "data/memory.db"
-    max_episodic_entries: int = 10000
-    similarity_threshold: float = 0.7
 
 
 # @dataclass
@@ -621,14 +637,19 @@ class Config:
     knownapps: KnownApps = field(default_factory= KnownApps)
     llm: LLMConfig = field(default_factory=LLMConfig)
     system: SystemConfig = field(default_factory=SystemConfig)
+
+    # New Memory module 
+    kuzu: KuzuMemoryConfig = field(default_factory=KuzuMemoryConfig)
+    # Old Memory module
     memory: MemoryConfig = field(default_factory=MemoryConfig)
+    
     # safety: SafetyConfig = field(default_factory=SafetyConfig)
     debug: bool = False
     log_level: str = "INFO"
     visual: VisualConfig = field(default_factory=VisualConfig)
     # verification: VerificationConfig = field(default_factory=VerificationConfig)
     root_dir: Path= ROOT_DIR
-
+    
     @classmethod
     def load(cls, path: str = "config.yaml") -> "Config":
         """Load configuration from YAML file."""

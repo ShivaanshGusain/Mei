@@ -9,7 +9,7 @@ import win32con
 from ..core.config import EntityType, ExtractionSource, ExtractedValue,FocusContext, Entity, TeachingResult
 from ..core.events import emit,EventType
 from ..perception.System.applibrary import get_app_library
-from ..memory.store import get_memory_store, MemoryStore
+from ..memory.graph import save_entity
 from ..memory.working import get_working_memory, WorkingMemory
 
 URL_PATTERN = re.compile(    
@@ -294,8 +294,8 @@ class EntityTeacher:
                 message="invalid_entity_value"
             )
         
-        store = get_memory_store()
-        entity_id = store.save_entity(entity)
+        entity_id = save_entity(entity)
+
         entity.id = entity_id
 
         emit(

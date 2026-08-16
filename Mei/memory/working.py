@@ -8,10 +8,15 @@ import json
 from ..core.config import ConversationTurn, SessionTask,UserCorrection, FocusContext, AppCapabilities
 from ..core.task import Intent, Plan
 from ..core.events import EventType, Event, subscribe, emit
-from .store import get_memory_store, MemoryStore
 
 from ..perception.System.windows import get_window_manager, WindowManager
-from ..core.config import WindowInfo
+from ..core.config import WindowInfo, KuzuMemoryConfig
+
+
+# Migeration to Kuzu
+from .graph import write_episode, create_session, close_session,\
+                    set_preference, get_preferences_by_category, \
+                    get_context_for_planner as graph_get_context, get_kuzu_connection
 
 DEFAULT_MAX_CONVERSATION_TURNS = 20
 DEFAULT_MAX_TASK_HISTORY = 50
@@ -20,7 +25,7 @@ DEFAULT_PRIOR_CONTENT_LIMIT = 10
 
 class WorkingMemory:
     def __init__(self, auto_subscribe: bool = True):
-        self._store: MemoryStore = get_memory_store()
+        self._store: KuzuMemoryConfig = get_kuzu_connection()
 
         self._window_manager: WindowManager = get_window_manager()
         self._focus_context: Optional[FocusContext] = None
@@ -302,17 +307,6 @@ class WorkingMemory:
                         self._focus_context.current_window_title
                     )
             
-            if action and method_used:
-                try:
-                    self._store.record_method_result(
-                        action = action,
-                        method_used=method_used,
-                        success=True,
-                        duration_ms=duration_ms,
-                        app_name=app_name
-                    )
-                except Exception as e:
-                    print(f"Failed to record method result: {e}")
             
             element_action = ['click','find_element','type_text']
 
@@ -411,18 +405,6 @@ class WorkingMemory:
                     window_pattern = self._simplify_window_title(
                         self._focus_context.current_window_title
                     )
-            
-            if action and method_used:
-                try:
-                    self._store.record_method_result(
-                        action = action,
-                        method_used=method_used,
-                        success=False,
-                        duration_ms=duration_ms,
-                        app_name=app_name
-                    )
-                except Exception as e:
-                    print(f"Failed to record method: {e}")
             
             element_actions = ["click", "find_element", "type_text"]
 
@@ -560,7 +542,7 @@ class WorkingMemory:
                 return True
         return False
     
-    def _handle_potantial_correction(self, new_intent:Intent)->None:
+    def _handle_potential_correction(self, new_intent:Intent)->None:
         if len(self._conversation_history)<2:
             return
         
@@ -693,7 +675,7 @@ class WorkingMemory:
                 step_results = step_results,
                 context = context,
                 failure_reason = None,
-                failure_step_index = None
+                failure_step_index = None,
             )
 
             if success and intent and plan:
@@ -715,23 +697,6 @@ class WorkingMemory:
                     #step_str = json.dumps(plan_steps_data, sort_keys=True)
                     #generated_hash = hashlib.md5(step_str.encode()).hexdigest()
 
-
-                    """self._store.cache_plan(
-                        intent_pattern=pattern,
-                        intent_action=intent.action,
-                        intent_target=intent.target,
-                        raw_command=intent.raw_command,
-                        plan_strategy=plan.strategy,
-                        plan_steps=plan_steps_data,
-                        plan_hash=getattr(plan, 'id', generated_hash)
-                    )
-
-                    self._store.record_command(
-                        raw_command=intent.raw_command,
-                        intent_action=intent.action,
-                        intent_target=intent.target,
-                        success=True
-                    )"""
 
                 except Exception as e:
                     print(f"Failed to cache plan: {e}")
@@ -848,19 +813,7 @@ class WorkingMemory:
             plan_dict = {"strategy":"unknown","reasoning":"","steps":[]}
 
         try:
-            self._store.save_task_execution(
-                execution_id=execution_id,
-                session_id=self._session_id,
-                raw_command=intent.raw_command,
-                intent= intent_dict,
-                plan = plan_dict,
-                success= success,
-                duration_ms=duration_ms,
-                failure_reason=failure_reason,
-                failure_step_index=failure_step_index,
-                context= context,
-                step_results = step_results
-            )
+            write_episode(execution_id, self._session_id , intent, step_results, success, duration_ms)
 
         except Exception as e:
             print(f"Failed to save task execution: {e}")
@@ -869,14 +822,7 @@ class WorkingMemory:
         if success and plan is not None:
             try:
                 intent_pattern = self._build_intent_pattern(intent)
-                self._store.cache_plan(
-                    intent_pattern=intent_pattern,
-                    intent_action=intent.action,
-                    intent_target=intent.target,
-                    plan_strategy=plan_dict['strategy'],
-                    plan_steps=plan_dict['steps'],
-                    raw_command=intent.raw_command.lower().strip()
-                )
+                
             except Exception as e:
                 print(f"Failed to cache plan: {e}")
 
@@ -888,17 +834,6 @@ class WorkingMemory:
             except Exception as e:
                 print(f"Failed to record plan failure: {e}")
 
-        try:
-            self._store.record_command(
-                raw_command=intent.raw_command,
-                intent_action= intent.action,
-                intent_target=intent.target,
-                success=success,
-                normalized_pattern=intent.raw_command.lower().strip()
-            )
-        
-        except Exception as e:
-            print(f"Failed to record command: {e}")
 
     
     def _on_agent_stopped(self,event:Event)->None:
@@ -948,13 +883,6 @@ class WorkingMemory:
         failed_tasks = total_tasks- successful_tasks
         session_duration = (datetime.now() - self._started_at).total_seconds() if self._started_at else 0
 
-        try:
-            deleted = self._store.cleanup_old_data()
-            if any(v > 0 for v in deleted.values()):
-                print(f"Cleanup deleted {deleted}")
-            
-        except Exception as e:
-            print(f"Cleanup Failed: {e}")
 
         emit(
             EventType.MEMORY_SESSION_ENDED,
@@ -986,7 +914,7 @@ class WorkingMemory:
                    'session_active' : self._is_active
                    }
         intent_pattern = self._build_intent_pattern(intent)
-        cached = self._store.get_cached_plan(intent_pattern, min_uses=1)
+        cached = graph_get_context(self._session_id, intent.raw_command)
         if cached:
             context["cached_plan"] = {
                 "steps":        cached.get("plan_steps_json"),
@@ -1068,15 +996,15 @@ class WorkingMemory:
     
     def get_recent_conversation(self, turns:int = 5)->List[ConversationTurn]:
         with self._lock:
-            return self._conversation_history[-turns].copy()
+            return self._conversation_history[-turns:].copy()
         
     def get_conversation_summary_for_llm(self,max_turns:int = 5)->str:
         
         with self._lock:
-            turns = self._conversation_history[-max_turns]
+            turns = self._conversation_history[-max_turns:]
         
         if not turns:
-            return "Noo previous conversation in this session."
+            return "No previous conversation in this session."
         
         lines = ['Recent conversation:']
 
@@ -1094,7 +1022,7 @@ class WorkingMemory:
 
     def get_task_history(self, count:int = 10)->List[SessionTask]:
         with self._lock:
-            return self._task_history[-count].copy()
+            return self._task_history[-count:].copy()
         
     def get_current_task(self)->Optional[SessionTask]:
         with self._lock:

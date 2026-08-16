@@ -16,7 +16,7 @@ from ...perception.Visual.analyzer import get_visual_analyzer
 
 import pyautogui
 from ..context import ExecutionContext
-from ...memory.store import get_memory_store
+from ...memory.graph import get_cached_element, record_element_hit, record_element_miss
 pyautogui.FAILSAFE = True
 pyautogui.PAUSE = 0.05
 
@@ -416,7 +416,7 @@ def click_execute(params: Dict[str, Any], context: ExecutionContext)->ActionResu
         query = str(query).strip()
 
 
-        store = get_memory_store()
+
         app_name = "unknown"
         window_pattern = None
         
@@ -424,11 +424,8 @@ def click_execute(params: Dict[str, Any], context: ExecutionContext)->ActionResu
         if context.current_window:
             app_name = context.current_window.process_name or "unknown"
             window_pattern = _simplify_window_title(context.current_window)
-        cached_pos = store.get_cached_element(
-            element_query=query, 
-            app_name=app_name, 
-            window_pattern=window_pattern
-        )
+        cached_pos = get_cached_element(element_query=query, app_name=app_name, window_pattern=window_pattern)
+
         
         if cached_pos:
             ref = ElementReference(

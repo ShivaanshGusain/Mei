@@ -11,13 +11,55 @@ from ..cognition.observation import get_observation_builder
 from ..perception.System.windows import WindowManager
 from  .config import Observation
 
-from ..core.config import ReactStep
-from .task import Intent, Plan
+from ..core.config import ReactStep, get_config
+from .task import Intent, Plan, Step
+
+import json
+
 _pipeline_active: bool = False
 _processed_count: int = 0
 _last_processed: Optional[str] = None
 
-
+def _try_graph_bypass(text: str) -> bool:
+    """
+    Pre-flight: query Kùzu for a matching procedural macro.
+    If confidence > threshold, skip the LLM entirely.
+    Returns True if bypass fired, False to fall through.
+    """
+    # TODO (Micro-Planner): Remove synthetic Plan creation in
+    # '_try_graph_bypass'. Update logic to push cached Action nodes
+    # directly into the sequential execution queue.
+    
+    from ..memory.graph import find_matching_goal, get_procedure
+    
+    threshold = get_config().kuzu.bypass_confidence_threshold  # 0.92
+    match = find_matching_goal(text, threshold)
+    if not match:
+        emit(EventType.MEMORY_PLAN_NOT_FOUND, source='Pipeline')
+        return False
+    
+    actions = get_procedure(match['id'])
+    if not actions:
+        return False
+    
+    print(f"[Pipeline] Graph bypass: matched '{match['raw_command']}' "
+          f"(confidence={match['confidence']:.2f})")
+    
+    steps = [
+        Step(id=f"cached_{i}", action=a['tool_name'],
+             parameters=json.loads(a.get('parameters_json') or '{}'),
+             description=f"Cached: {a['tool_name']}")
+        for i, a in enumerate(actions)
+    ]
+    plan = Plan(steps=steps, strategy="procedural_cache",
+                reasoning=f"Graph bypass (conf={match['confidence']:.2f})")
+    intent = Intent(action=match['action'], target=match['target'],
+                    parameters={}, confidence=match['confidence'],
+                    raw_command=text, complexity='cached')
+    
+    emit(EventType.MEMORY_PLAN_FOUND, source='Pipeline', plan=plan, intent=intent)
+    emit(EventType.PLAN_CREATED, source='Pipeline', plan=plan, intent=intent)
+    return True
 
 def _on_transcription_complete(event: Event) -> None:
     """
@@ -45,6 +87,9 @@ def _on_transcription_complete(event: Event) -> None:
     print(f"\n{'='*50}")
     print(f"[Pipeline] Received: \"{text}\"")
     print(f"{'='*50}")
+
+    if get_config().kuzu.enable_graph_memory and _try_graph_bypass(text):
+        return  # Executor handles via PLAN_CREATED
 
     # ── Step 1: Parse Intent ──
     try:
