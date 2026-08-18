@@ -108,7 +108,8 @@ restricted_flags:
 # ═══════════════════════════════════════════════════
 allowed_write_roots:
   - "C:\\Users\\Asus\\Projects"
-  - "D:\\Projects"
+  - "C:\\Projects"
+  - "C:\\Users\\Asus\\Desktop"
 
 # ── Always blocked for writes, even inside allowed roots ──
 protected_paths:

@@ -33,7 +33,7 @@ def sign():
         print("Run: python -m Mei.scripts.generate_keys")
         return
 
-    with open(config_path, "r") as f:
+    with open(config_path, "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
     
     canonical = canonicalize(config)

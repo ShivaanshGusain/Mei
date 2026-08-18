@@ -67,7 +67,7 @@ def _build_ruleset(config:Dict[str,Any])->GuardrailRuleset:
         allowed_executables=frozenset(e.lower() for e in config.get("allowed_executables",[])),
         blocked_shell_operators=frozenset(config.get("blocked_shell_operators", [])),
         allow_chaining=config.get("allow_chaining", False),
-
+        allowed_write_roots= write_root,
         restricted_flags=restricted,
         protected_paths=protected,
         binary_extensions=frozenset(

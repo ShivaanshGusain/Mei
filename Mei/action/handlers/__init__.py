@@ -5,7 +5,7 @@ from .navigation import get_navigation_handlers, NAVIGATION_HANDLERS
 from .utility import get_util_handers, UTIL_HANDLERS
 from .web import register_web_tools
 from .system import register_system_tools
-
+from .utility import register_utility_tools
 """
 def get_all_handlers():
     #Get instances of all handlers.
@@ -44,7 +44,12 @@ def register_all_tools(executor) -> None:
         register_system_tools(executor)
     except Exception as e:
         print(f"Failed to register system tools: {e}")
-    
+
+    try:
+        register_utility_tools(executor)
+    except Exception as e:
+        print(f"Failed to register utility tools: {e}")
+        
     print(f"Total tools registered: {len(executor.list_actions())}")
 
 __all__ = [

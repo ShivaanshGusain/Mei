@@ -98,7 +98,7 @@ class ReactStep:
 class KuzuMemoryConfig:
     database_path : str = "data/kuzu_memory"
     embedding_model : str = "all-MiniLM-L6-v2"
-    bypass_confidence_threshold : float = 0.92
+    bypass_confidence_threshold : float = 0.85
     enable_graph_memory: bool = True
 
 
@@ -117,7 +117,7 @@ class MemoryConfig:
 @dataclass
 class WebConfig:
     """Web/Browser automation settings"""
-    cdp_url: str = "http://localhost:9222"
+    cdp_url: str = "http://127.0.0.1:9222"
     default_timeout_ms: int = 10000 # 10s for navigation
     action_timeout_ms: int = 3000   # 3s for clicks/waits
     headless: bool = False
@@ -363,7 +363,7 @@ class LLMConfig:
     """Language Model settings"""
     model_path: str = str(Path(__file__).parent.parent.parent /"models"/"qwen2.5-3b-instruct-q4_k_m.gguf")
     context_length: int = 2500 
-    max_tokens: int = 256 
+    max_tokens: int = 512 
     temperature: float = 0.1
     threads: int = 16
     gpu_layers: int = -1
@@ -373,9 +373,9 @@ class LLMConfig:
     planner_model_path: str = str(Path(__file__).parent.parent.parent/"models"/"xLAM-2-1B-fc-r-Q4_0.gguf")
 
     intent_gpu_layers: int = 0
-    intent_context_length: int = 2500
+    intent_context_length: int = 6144
     planner_gpu_layers: int = -1
-    planner_context_length: int = 4064 #6144     
+    planner_context_length: int = 2048 #4064 #6144     
 @dataclass
 class ActionResult:
     success:bool
@@ -701,7 +701,7 @@ class Config:
     
     def save(self, path: str = "config.yaml"):
         """Save configuration to YAML file."""
-        data = {
+        data = {    
             'audio': {
                 'model_path': self.audio.model_path,
                 'device': self.audio.device,

@@ -45,6 +45,44 @@ class Intent:
     def __str__(self):
         return f"Intent({self.action}, target={self.target}, params={self.parameters})"
 
+class StepExecutionStatus(str, Enum):
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+
+@dataclass
+class IntentStep:
+    step_id: int
+    description: str          # "Open Discord application"
+    expected_output: str      # "Discord window is active in foreground"
+    domain: str = "app"       # app | window | web | file | input | system
+    target: Optional[str] = None
+    parameters: Dict[str, Any] = field(default_factory=dict)
+    status: StepExecutionStatus = StepExecutionStatus.PENDING
+    retry_count: int = 0
+    max_retries: int = 2
+
+@dataclass
+class IntentSequence:
+    raw_command: str
+    steps: List[IntentStep] = field(default_factory=list)
+    is_verified_macro: bool = False
+    source_goal_id: Optional[str] = None
+    confidence: float = 1.0
+    created_at: datetime = field(default_factory=datetime.now)
+
+    def is_complete(self) -> bool:
+        return all(s.status == StepExecutionStatus.COMPLETED for s in self.steps)
+
+    def get_next_step(self) -> Optional[IntentStep]:
+        for step in self.steps:
+            if step.status in (StepExecutionStatus.PENDING,
+                               StepExecutionStatus.RUNNING):
+                return step
+        return None
+
 class AppBridge(ABC):
     @property
     @abstractmethod

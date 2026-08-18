@@ -13,12 +13,6 @@ def write_episode(
     success: bool,
     duration_ms: float
 ) -> None:
-    """
-    # TODO (Micro-Planner): Refactor 'write_episode' signature to accept
-    # a List[Intent] or IntentSequence instead of a single Intent.
-    # Ensure ExecutionContext accumulates all step_results before
-    # triggering this post-flight hook.
-    """
     try:
         conn = get_kuzu_connection()
         if not conn:
@@ -26,30 +20,25 @@ def write_episode(
             return
 
         now = datetime.now().isoformat()
-        raw_cmd = intent.get('raw_command', '')
-        intent_action = intent.get('action', '')
-        intent_target = intent.get('target', '')
+        intent_dict = intent if isinstance(intent, dict) else intent.__dict__
+        raw_cmd = intent_dict.get('raw_command', '')
+        intent_action = intent_dict.get('action', '')
+        intent_target = intent_dict.get('target', '')
         
         embedding = embed(raw_cmd)
         goal_id = f"goal_{execution_id}"
         
-        # 1 & 2. MERGE Goal
+        # 1. CREATE Goal (Changed from MERGE to CREATE to avoid Vector Index errors)
         goal_query = """
-        MERGE (g:Goal {id: $goal_id})
-        ON CREATE SET 
-            g.raw_command = $raw_cmd,
-            g.action = $action,
-            g.target = $target,
-            g.session_id = $session_id,
-            g.created_at = $now,
-            g.embedding = $embedding
-        ON MATCH SET
-            g.raw_command = $raw_cmd,
-            g.action = $action,
-            g.target = $target,
-            g.session_id = $session_id,
-            g.created_at = $now,
-            g.embedding = $embedding
+        CREATE (g:Goal {
+            id: $goal_id,
+            raw_command: $raw_cmd,
+            action: $action,
+            target: $target,
+            session_id: $session_id,
+            created_at: $now,
+            embedding: $embedding
+        })
         """
         conn.execute(goal_query, {
             'goal_id': goal_id,
@@ -61,7 +50,7 @@ def write_episode(
             'embedding': embedding
         })
         
-        # 6. Create edge Goal -[PART_OF_SESSION]-> Session
+        # 2. Create edge Goal -[PART_OF_SESSION]-> Session
         session_query = """
         MERGE (s:Session {id: $session_id})
         WITH s
@@ -98,7 +87,10 @@ def write_episode(
                 a.started_at = $now,
                 a.completed_at = $now,
                 a.duration_ms = $step_dur,
-                a.method_used = $method_used
+                a.method_used = $method_used,
+                a.step_description = $step_description,
+                a.step_domain = $step_domain,
+                a.step_expected_output = $step_expected_output
             ON MATCH SET
                 a.tool_name = $tool_name,
                 a.parameters_json = $params_json,
@@ -106,7 +98,10 @@ def write_episode(
                 a.cwd = $cwd,
                 a.background = $background,
                 a.duration_ms = $step_dur,
-                a.method_used = $method_used
+                a.method_used = $method_used,
+                a.step_description = $step_description,
+                a.step_domain = $step_domain,
+                a.step_expected_output = $step_expected_output
             """
             conn.execute(action_query, {
                 'action_id': action_id,
@@ -117,7 +112,10 @@ def write_episode(
                 'background': background,
                 'now': now,
                 'step_dur': step_dur,
-                'method_used': method_used
+                'method_used': method_used,
+                'step_description': step.get('step_description', ''),
+                'step_domain': step.get('step_domain', ''),
+                'step_expected_output': step.get('step_expected_output', ''),
             })
             
             obs_success = bool(step.get('success', False))
@@ -182,7 +180,6 @@ def write_episode(
             
     except Exception as e:
         print(f"Error in write_episode: {e}")
-
 def load_episode(execution_id: str) -> Optional[dict[str, Any]]:
     """Returns goal + ordered actions + observations for an execution."""
     try:

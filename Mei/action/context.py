@@ -21,6 +21,13 @@ class ExecutionContext:
 
         self.variables:Dict[str, Any] = {}
 
+    @classmethod
+    def empty(cls) -> "ExecutionContext":
+        from ..core.task import Intent, Plan
+        empty_intent = Intent(action="unknown", raw_command="")
+        empty_plan = Plan(strategy="empty", reasoning="", steps=[])
+        return cls(plan=empty_plan, intent=empty_intent)
+
     @property
     def current_window(self) -> Optional[WindowInfo]:
         # If returns None, the handler should use get_foreground_window() or return an error

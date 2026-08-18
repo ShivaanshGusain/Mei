@@ -62,7 +62,7 @@ def load_and_verify() -> Tuple[bool, Optional[Dict[str, Any]], str]:
         return (False, None, f"Signature not found: {sig_path}")
     
     try:
-        with open(config_path, "r") as f:
+        with open(config_path, "r",encoding="utf-8") as f:
             config = yaml.safe_load(f)
         
         if not isinstance(config, dict):

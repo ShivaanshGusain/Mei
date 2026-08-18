@@ -6,9 +6,70 @@ from ...core.task import ActionHandler
 
 from ...perception.System.process import get_process_manager
 from ...perception.System.windows import get_window_manager
+from ...perception.System.applibrary import get_app_library
 
 from ..context import ExecutionContext
 
+import difflib
+import urllib.request
+import json
+
+def _resolve_app_name(raw_name: str, process_manager) -> str:
+    """
+    Resolves conversational LLM app names (e.g. 'Brave Browser', 'Notepad app')
+    to known registered/executable names (e.g. 'brave', 'notepad').
+    """
+    raw_lower = raw_name.lower().strip()
+    
+    # 1. Strip common LLM conversational filler words
+    for suffix in [" browser", " application", " app", ".exe"]:
+        raw_lower = raw_lower.replace(suffix, "").strip()
+
+    # 2. Get list of available known app keys from process_manager / app_library
+    known_apps: list[str] = []
+    if hasattr(process_manager, "get_known_apps"):
+        known_apps = list(process_manager.get_known_apps().keys())
+    elif hasattr(process_manager, "_apps"):
+        known_apps = list(process_manager._apps.keys())
+    elif hasattr(process_manager, "app_library") and hasattr(process_manager.app_library, "get_all"):
+        known_apps = [app.executable_name.replace(".exe", "").lower() for app in process_manager.app_library.get_all()]
+
+    if not known_apps:
+        return raw_lower  # Fallback to cleaned name if app list is inaccessible
+
+    # TIER 1: Exact match
+    for app in known_apps:
+        if raw_lower == app.lower().replace(".exe", ""):
+            return app
+
+    # TIER 2: Substring containment (e.g. 'brave' in 'brave browser')
+    for app in known_apps:
+        clean_app = app.lower().replace(".exe", "")
+        if clean_app in raw_lower or raw_lower in clean_app:
+            return app
+
+    # TIER 3: Levenshtein distance (catches typos, e.g. 'notpad' -> 'notepad')
+    clean_known = {app.lower().replace(".exe", ""): app for app in known_apps}
+    matches = difflib.get_close_matches(raw_lower, list(clean_known.keys()), n=1, cutoff=0.6)
+    if matches:
+        matched_app = clean_known[matches[0]]
+        print(f"[AppHandler] Fuzzy matched '{raw_name}' -> '{matched_app}'")
+        return matched_app
+
+    return raw_lower
+
+def _is_cdp_available(port: int = 9222) -> bool:
+    """Checks if a browser is actively listening on the CDP debugging port."""
+    import socket
+    try:
+        # Fast socket check strictly on IPv4
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(1.0)
+            result = s.connect_ex(('127.0.0.1', port))
+            return result == 0
+    except Exception:
+        return False
+        
 def _launch_app_wait_for_window(pid: int, app_name: str)-> Optional['WindowInfo']:
 
     window_manager = get_window_manager()
@@ -37,15 +98,71 @@ def launch_app_validate(params: Dict[str,Any])-> Tuple[bool,Optional[str]]:
 def launch_app_execute(params: Dict[str,Any], context: ExecutionContext)-> ActionResult:
     try:
         app_name = str(params['app_name']).strip()
+        process_manager = get_process_manager()
+
+        app_name = _resolve_app_name(app_name, process_manager)
+        is_browser = get_app_library().guess_category(app_name) == "browser"
+        print(f"[AppHandler] app_name='{app_name}', is_browser={is_browser}")
+        
+        if is_browser and _is_cdp_available(9222):
+            print(f"[AppHandler] CDP path: browser detected on port 9222")
+            # Find the existing browser window and attach it to context
+            window_manager = get_window_manager()
+            browser_window = None
+
+            # Try to match the exact tab that CDP/Playwright is on
+            try:
+                
+                from .web.session import get_browser_manager
+                manager = get_browser_manager()
+                if manager.connect():
+                    active_page = manager.get_active_page()
+                    if active_page:
+                        cdp_title = active_page.title()
+                        if cdp_title:
+                            browser_window = window_manager.find_window(cdp_title)
+            except Exception:
+                pass
+
+            # Fallback to process name match
+            if not browser_window:
+                browser_window = window_manager.find_window(app_name)
+
+            if browser_window:
+                window_manager.focus_window(browser_window.hwnd)
+                context.set_current_window(browser_window)
+                print(f"[AppHandler] CDP: attached window '{browser_window.title}' (hwnd={browser_window.hwnd})")
+            else:
+                print(f"[AppHandler] CDP: WARNING - no window found for '{app_name}'")
+                
+            context.set_variable("browser_cdp_active", True)
+            context.set_variable("launched_app", app_name)
+            return ActionResult(
+                success=True,
+                data={
+                    "app_name": app_name,
+                    "already_running": True,
+                    "cdp_active": True,
+                    "hwnd": browser_window.hwnd if browser_window else None,
+                    "title": browser_window.title if browser_window else None,
+                    "pid": browser_window.pid if browser_window else None
+                },
+                method_used="cdp_session"
+            )
         wait_for_window = params.get('wait_for_window', True)
         focus_if_running = params.get('focus_if_running', True)
         
         process_manager = get_process_manager()
         window_manager = get_window_manager()
 
+        app_name = _resolve_app_name(app_name, process_manager)
+        print(f"[AppHandler] Resolved name: '{app_name}'")
+        
         is_running = process_manager.is_running(app_name)
+        print(f"[AppHandler] is_running={is_running}")
         if is_running and focus_if_running:
             window = window_manager.find_window(app_name)
+            print(f"[AppHandler] find_window result: {window.title if window else None}")
             if window:
                 success = window_manager.focus_window(window.hwnd)
                 if success:
@@ -64,6 +181,7 @@ def launch_app_execute(params: Dict[str,Any], context: ExecutionContext)-> Actio
                         method_used="process_manager"
                     )
         pid = process_manager.launch(app_name)
+        print(f"[AppHandler] Launched pid={pid}")
         if pid is None:
             return ActionResult(
                 success = False,
@@ -76,6 +194,7 @@ def launch_app_execute(params: Dict[str,Any], context: ExecutionContext)-> Actio
         window = None
         if wait_for_window:
                 window = _launch_app_wait_for_window(pid, app_name)        
+        print(f"[AppHandler] Window after wait: {window.title if window else None}")
         if window:
             window_manager.focus_window(window.hwnd)
             context.set_current_window(window)
@@ -93,6 +212,8 @@ def launch_app_execute(params: Dict[str,Any], context: ExecutionContext)-> Actio
             method_used="process_manager"
         )
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return ActionResult(
             success=False,
             error=f"Exception Launching app: {str(e)}",

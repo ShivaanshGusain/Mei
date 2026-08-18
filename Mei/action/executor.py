@@ -446,7 +446,7 @@ class PlanExecutor:
             )           
             return (False, error_msg)                          
 
-    def execute_single_action(self, action:str, parameters: Dict[str, Any])->ActionResult:
+    def execute_single_action(self, action:str, parameters: Dict[str, Any], context: Optional[ExecutionContext] = None)->ActionResult:
         # handler = self.get_handler(action)
         # if not handler:
         
@@ -469,27 +469,29 @@ class PlanExecutor:
                 error = f"Validation failed: {error}"
             )
         
-        dummy_intent = Intent(
-            action=action,
-            target=None,
-            parameters=parameters,
-            confidence=0.1,
-            raw_command=f"direct:{action}"
-        )
-        dummy_step = Step(
-            id=f"direct_{action}",
-            action=action,
-            parameters=parameters,
-            description=f"Direct execution of {action}"
-        )
+        # If no external context was provided, create a minimal one
+        if context is None:
+            dummy_intent = Intent(
+                action=action,
+                target=None,
+                parameters=parameters,
+                confidence=0.1,
+                raw_command=f"direct:{action}"
+            )
+            dummy_step = Step(
+                id=f"direct_{action}",
+                action=action,
+                parameters=parameters,
+                description=f"Direct execution of {action}"
+            )
 
-        dummy_plan = Plan(
-            steps=[dummy_step],
-            strategy="direct_execution",
-            reasoning="Direct action execution"
-        )
+            dummy_plan = Plan(
+                steps=[dummy_step],
+                strategy="direct_execution",
+                reasoning="Direct action execution"
+            )
 
-        context = ExecutionContext(plan = dummy_plan, intent= dummy_intent)
+            context = ExecutionContext(plan = dummy_plan, intent= dummy_intent)
 
         try:
             # return handler.execute(parameters,context)

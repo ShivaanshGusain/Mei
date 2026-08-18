@@ -15,6 +15,29 @@ WEB_NAVIGATE_SCHEMA = {
                 "description": "Open in a new tab instead of current"},
 }
 
+def is_blank_or_newtab(url: str) -> bool:
+    """
+    Browser-agnostic check for initial/blank/new tab pages.
+    Works across Chrome, Brave, Edge, Vivaldi, Zen, and Firefox.
+    """
+    if not url:
+        return True
+        
+    url_clean = url.strip().lower()
+    
+    # 1. Any non-web scheme is an internal browser page
+    if not (url_clean.startswith("http://") or url_clean.startswith("https://") or url_clean.startswith("file://")):
+        return True
+        
+    # 2. Check for generic newtab / blank keywords
+    placeholder_keywords = ["newtab", "blank", "startpage", "home"]
+    if any(keyword in url_clean for keyword in placeholder_keywords):
+        # If it contains these words AND has no standard domain structure, it's an internal tab
+        if "://" in url_clean and not any(url_clean.startswith(proto) for proto in ["http://", "https://"]):
+            return True
+
+    return False
+
 def web_navigate_validate(params: Dict[str, Any])-> Tuple[bool, Optional[str]]:
     url = params.get("url")
     if not url or not str(url).strip():
@@ -45,7 +68,7 @@ def web_navigate_execute(params: Dict[str, Any], context: ExecutionContext)-> Ac
             )
 
         try:
-            response = page.stop.goto(
+            response = page.goto(
                 url,
                 wait_until="domcontentloaded",
                 timeout=config.default_timeout_ms
@@ -54,10 +77,10 @@ def web_navigate_execute(params: Dict[str, Any], context: ExecutionContext)-> Ac
             # Try to wait for networkidle, but don't fail if it times out
             try:
                 page.wait_for_load_state("networkidle", timeout=5000)
-
+                page.wait_for_url(lambda u: not is_blank_or_newtab(u), timeout=5000)
             except PlaywrightTimeout:
                 pass
-
+            
             status = response.status if response else None
 
         except PlaywrightTimeout:

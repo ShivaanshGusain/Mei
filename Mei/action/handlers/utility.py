@@ -1,3 +1,8 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from ..executor import PlanExecutor
+
 import time
 from typing import Dict, Any, Tuple, Optional
 # from datetime import datetime
@@ -280,7 +285,17 @@ class FindElementHandler(ActionHandler):
                 reason = "Element not in cache or stale"
             )
 """
-
+def register_utility_tools(executor:PlanExecutor) -> None:
+    handler = WaitHandler()
+    executor.register(
+        name="wait",
+        impl=handler.execute,
+        domain="utility",
+        validate_fn=handler.validate,
+        supports_verification=False,
+        cost=1,
+        description="Pause execution. Use after launching apps before interacting."
+    )
 # UTIL_HANDLERS = [WaitHandler, FindElementHandler]
 UTIL_HANDLERS = [WaitHandler]
 def get_util_handers()->list:

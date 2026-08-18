@@ -217,7 +217,7 @@ def register_system_tools(executor) -> None:
     # ═══════════════════════════════════════════════════
 
     executor.register(
-        name="change_directory",
+        name="cd",
         impl=change_dir_execute,
         domain="system",
         schema=CHANGE_DIR_SCHEMA,

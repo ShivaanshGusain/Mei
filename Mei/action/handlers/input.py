@@ -75,7 +75,16 @@ def type_text_execute(params:Dict[str, Any], context: ExecutionContext)->ActionR
         use_clipboard = params.get("use_clipboard", False)
 
         context.set_variable("typed_text", text)
-
+        if element_query and context.get_variable("browser_cdp_active"):
+            # Use Playwright web_type instead of UI automation
+            from .web.interact import web_type_execute
+            return web_type_execute({
+                "selector": element_query,
+                "text": text,
+                "clear_first": clear_first,
+                "submit": False
+            }, context)
+        
         if element_query:
             result = _type_into_element(
                 text, element_query, context, clear_first, interval

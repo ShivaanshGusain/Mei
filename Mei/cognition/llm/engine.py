@@ -162,6 +162,61 @@ class LLMEngine:
         print(f"[{self._name}] chat() failed: Failed to get valid JSON")
         return None
     
+    def chat_tool_call(
+        self,
+        messages: List[Dict[str, str]],
+        tool_names: List[str],
+        system_prompt: str = None
+    ) -> Optional[Dict]:
+        """
+        Constrained JSON generation — model output is physically restricted to
+        valid tool names via JSON Schema grammar. No retry loop needed.
+
+        tool_names: list of valid action names from the tool retriever.
+        Falls back to chat_json if constrained decoding is unavailable.
+        """
+        if not self._load_model():
+            return None
+
+        schema = {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": tool_names
+                },
+                "parameters": {
+                    "type": "object"
+                }
+            },
+            "required": ["action", "parameters"]
+        }
+
+        full_messages = []
+        if system_prompt:
+            full_messages.append({"role": "system", "content": system_prompt})
+        full_messages.extend(messages)
+
+        try:
+            output = self._model.create_chat_completion(
+                messages=full_messages,
+                max_tokens=self._max_tokens,
+                temperature=self._temperature,
+                response_format={
+                    "type": "json_object",
+                    "schema": schema
+                }
+            )
+            raw = output["choices"][0]["message"]["content"].strip()
+            result = json.loads(raw)
+            print(f"[{self._name}] chat_tool_call: action={result.get('action')}")
+            return result
+
+        except Exception as e:
+            # Fallback to chat_json if constrained decoding is not supported
+            print(f"[{self._name}] chat_tool_call failed ({e}), falling back to chat_json")
+            return self.chat_json(messages=messages, system_prompt=system_prompt, max_retries=1)
+
     def _extract_json(self,text:str)->Optional[str]:
         start = text.find('{')
         if start == -1:

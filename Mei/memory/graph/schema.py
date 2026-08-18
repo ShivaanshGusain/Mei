@@ -22,6 +22,9 @@ KUZU_SCHEMA = [
     completed_at        STRING,
     duration_ms         DOUBLE,
     method_used         STRING,
+    step_description    STRING,
+    step_domain         STRING,
+    step_expected_output STRING,
     PRIMARY KEY (id))
     """,
     """
@@ -55,7 +58,7 @@ KUZU_SCHEMA = [
     """,
     """
     CREATE NODE TABLE IF NOT EXISTS ElementCache (
-id                      STRING,
+    id                  STRING,
     element_query       STRING,
     app_name            STRING,
     window_pattern      STRING,

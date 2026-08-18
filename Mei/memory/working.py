@@ -13,10 +13,11 @@ from ..perception.System.windows import get_window_manager, WindowManager
 from ..core.config import WindowInfo, KuzuMemoryConfig
 
 
-# Migeration to Kuzu
-from .graph import write_episode, create_session, close_session,\
-                    set_preference, get_preferences_by_category, \
-                    get_context_for_planner as graph_get_context, get_kuzu_connection
+# Migration to Kuzu
+from .graph import (write_episode, create_session, close_session,
+                    set_preference, get_preference, get_preferences_by_category,
+                    get_context_for_planner as graph_get_context,
+                    cache_element, record_element_hit, record_element_miss)
 
 DEFAULT_MAX_CONVERSATION_TURNS = 20
 DEFAULT_MAX_TASK_HISTORY = 50
@@ -25,7 +26,6 @@ DEFAULT_PRIOR_CONTENT_LIMIT = 10
 
 class WorkingMemory:
     def __init__(self, auto_subscribe: bool = True):
-        self._store: KuzuMemoryConfig = get_kuzu_connection()
 
         self._window_manager: WindowManager = get_window_manager()
         self._focus_context: Optional[FocusContext] = None
@@ -246,8 +246,8 @@ class WorkingMemory:
         subscribe(EventType.PLAN_STEP_COMPLETED, self._on_plan_step_completed)
         subscribe(EventType.PLAN_STEP_FAILED, self._on_plan_step_failed)
 
-    def _on_agent_started(self,event:Event)->None:
-        
+    def _on_agent_started(self, event: Event) -> None:
+
         with self._lock:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             random_suffix = secrets.token_hex(4)
@@ -264,24 +264,22 @@ class WorkingMemory:
             self._session_preferences = {}
             self._prior_context = []
 
+            # Create session node in graph
             try:
-                recent_tasks = self._store.get_task_executions(
-                    limit = DEFAULT_PRIOR_CONTENT_LIMIT
-                )
-                self._prior_context = recent_tasks
+                create_session(self._session_id, self._started_at.isoformat())
             except Exception as e:
-                print(f"Could not load prior context: {e}")
-            
+                print(f"Could not create graph session: {e}")
+
+            # Load prior preferences from graph
             try:
-                behavior_prefs = self._store.get_preferences_by_category('behavior')
-                app_prefs = self._store.get_preferences_by_category('app')
+                behavior_prefs = get_preferences_by_category('behavior')
+                app_prefs = get_preferences_by_category('app')
                 self._session_preferences.update(behavior_prefs)
                 self._session_preferences.update(app_prefs)
-
             except Exception as e:
                 print(f"Could not load preferences: {e}")
 
-            emit( EventType.MEMORY_SESSION_STARTED, source="WorkingMemory", session_id = self._session_id)
+            emit(EventType.MEMORY_SESSION_STARTED, source="WorkingMemory", session_id=self._session_id)
 
             print(f"Session {self._session_id} started")
 
@@ -325,13 +323,13 @@ class WorkingMemory:
                         result_data=result_data
                     )
     
-    def _handle_element_success(self, element_query:str,app_name:str,window_pattern:Optional[str], method_used:str, result_data: Dict[str,Any])->None:
+    def _handle_element_success(self, element_query: str, app_name: str, window_pattern: Optional[str], method_used: str, result_data: Dict[str, Any]) -> None:
         used_cached = result_data.get('used_cached_position', False)
         element_source = result_data.get("element_source", method_used)
 
         try:
             if used_cached:
-                self._store.record_element_hit(
+                record_element_hit(
                     element_query=element_query,
                     app_name=app_name,
                     window_pattern=window_pattern
@@ -355,7 +353,7 @@ class WorkingMemory:
                             position.get("h", 0)
                         )
 
-                        self._store.cache_element(
+                        cache_element(
                             element_query=element_query,
                             app_name=app_name,
                             bounding_box=bounding_box,
@@ -416,7 +414,7 @@ class WorkingMemory:
 
                 if element_query and self._is_element_not_found_error(error):
                     try:
-                        self._store.record_element_miss(
+                        record_element_miss(
                             element_query=element_query,
                             app_name=app_name,
                             window_pattern=window_pattern
@@ -542,40 +540,7 @@ class WorkingMemory:
                 return True
         return False
     
-    def _handle_potential_correction(self, new_intent:Intent)->None:
-        if len(self._conversation_history)<2:
-            return
-        
-        previous_turn = self._conversation_history[-2]
-        current_turn = self._conversation_history[-1]
-
-        if previous_turn.intent is None:
-            return
-        
-        if previous_turn.intent.action == new_intent.action:
-            if previous_turn.intent.target != new_intent.target:
-                pass
-            else:
-                return
-        else:
-            if not self._has_explicit_correction_language(current_turn.user_input):
-                return
-            
-        correction = UserCorrection(
-            timestamp=datetime.now(),
-            original_input=previous_turn.user_input,
-            original_intent=previous_turn.intent,
-            corrected_input = current_turn.user_input,
-            corrected_intent=new_intent,
-            context={
-                'session_id':self._session_id,
-                'turn_index':len(self._conversation_history) -1
-            }
-        )
-
-        self._corrections.append(correction)
-
-        print(f"recorded correction: {previous_turn.intent.target} -> {new_intent.target}")
+    # NOTE: Duplicate _handle_potential_correction removed — kept the first definition at L492
     
     def _has_explicit_correction_language(self, text:str)->bool:
         explicit_phrases = ['no ', 'not ', 'i meant', 'i mean', 'wrong']
@@ -666,40 +631,7 @@ class WorkingMemory:
                         turn.task_id = execution_id
                         break
                 
-            self._persist_completed_task(
-                execution_id=execution_id,
-                intent=intent,
-                plan=plan,
-                success = True,
-                duration_ms = duration_ms,
-                step_results = step_results,
-                context = context,
-                failure_reason = None,
-                failure_step_index = None,
-            )
 
-            if success and intent and plan:
-                try:
-                    pattern = intent.action.lower()
-                    if intent.target:
-                        pattern +=f":{intent.target.lower()}"
-                    
-                    if intent.action.lower() in ["search", "type", "type_text", "navigate"]:
-                        pattern += "*"
-                    import hashlib
-                    plan_steps_data = []
-                    for step in plan.steps:
-                        plan_steps_data.append({
-                            "action": step.action,
-                            "parameters": step.parameters,
-                            "description": step.description
-                        })
-                    #step_str = json.dumps(plan_steps_data, sort_keys=True)
-                    #generated_hash = hashlib.md5(step_str.encode()).hexdigest()
-
-
-                except Exception as e:
-                    print(f"Failed to cache plan: {e}")
             emit(
                 EventType.MEMORY_STORED,
                 source="WorkingMemory",
@@ -747,17 +679,7 @@ class WorkingMemory:
                         turn.task_id = execution_id
                         break
 
-            self._persist_completed_task(
-                execution_id=execution_id,  
-                intent=intent,
-                plan=plan,
-                success=False,
-                duration_ms=duration_ms,
-                step_results=step_results,
-                context=context,
-                failure_reason=error,
-               failure_step_index=failed_step_index
-            )
+
 
             emit(
                 EventType.MEMORY_STORED,
@@ -768,137 +690,78 @@ class WorkingMemory:
             )
 
             self._last_activity = datetime.now()
-    def _persist_completed_task(
-            self, 
-            execution_id:str, 
-            intent:Intent, 
-            plan:Optional[Plan], 
-            success:bool, 
-            duration_ms:float, 
-            step_results:List[Dict[str,Any]], 
-            context:Optional[Dict[str,Any]], 
-            failure_reason:Optional[str], 
-            failure_step_index: Optional[int]
-            )->int:
-        
-        intent_dict = {
-            "action":       intent.action,
-            "target":       intent.target,
-            "parameters":   intent.parameters,
-            "confidence":   intent.confidence,
-            "complexity":   getattr(intent, "complexity", "multi_step"),
-            "domain":       getattr(intent, "domain", "unknown"),
-        }
 
-
-        if plan is not None:
-            plan_dict = {
-                'strategy':plan.strategy if hasattr(plan,'strategy') else 'unknown',
-                'reasoning': plan.reasoning if hasattr(plan,'reasoning') else "",
-                'steps': []
-            }
-
-            if hasattr(plan,'steps'):
-                for step in plan.steps:
-                    if hasattr(step, 'to_dict'):
-                        plan_dict['steps'].append(step.to_dict())
-                    elif hasattr(step,"__dict__"):
-                        plan_dict['steps'].append({
-                            'action':step.action,
-                            'parameters':step.parameters,
-                            'description':getattr(step,'description',"")
-                        })
-        
-        else:
-            plan_dict = {"strategy":"unknown","reasoning":"","steps":[]}
-
-        try:
-            write_episode(execution_id, self._session_id , intent, step_results, success, duration_ms)
-
-        except Exception as e:
-            print(f"Failed to save task execution: {e}")
-            return
-        
-        if success and plan is not None:
-            try:
-                intent_pattern = self._build_intent_pattern(intent)
-                
-            except Exception as e:
-                print(f"Failed to cache plan: {e}")
-
-        
-        if not success:
-            try:
-                intent_pattern = self._build_intent_pattern(intent)
-                self._store.record_plan_failure(intent_pattern)
-            except Exception as e:
-                print(f"Failed to record plan failure: {e}")
 
 
     
-    def _on_agent_stopped(self,event:Event)->None:
+    def _on_agent_stopped(self, event: Event) -> None:
         if not self._is_active:
             return
-        
+
         with self._lock:
 
             if self._current_task is not None:
-
-                self._current_task.completed_at = datetime. now()
+                self._current_task.completed_at = datetime.now()
                 self._current_task.success = False
                 self._current_task.error = "Session ended before task completion"
                 self._task_history.append(self._current_task)
                 self._current_task = None
 
+            # Persist session preferences to graph
             for key, value in self._session_preferences.items():
                 try:
-                    existing = self._store.get_preferences(key)
-                    if existing!=value:
-                        self._store.set_preference(
-                            preference_key=key,
-                            preference_value=value,
+                    existing = get_preference(key)
+                    if existing != value:
+                        set_preference(
+                            key=key,
+                            value=value,
+                            category='behavior',
                             is_explicit=False,
                             confidence=0.5
                         )
-
                 except Exception as e:
                     print(f"Failed to persist preference {key}: {e}")
 
+            # Persist corrections as preferences
             for correction in self._corrections:
                 try:
                     key = f"correction:{correction.original_intent.target}:{correction.corrected_intent.target}"
-                    self._store.set_preference(
-                        preference_key=key,
-                        preference_value=correction.to_dict(),
+                    set_preference(
+                        key=key,
+                        value=correction.to_dict(),
                         category='correction',
                         is_explicit=False,
                         confidence=0.7
                     )
-                
                 except Exception as e:
                     pass
-            
+
+            # Close session node in graph
+            try:
+                close_session(self._session_id, datetime.now().isoformat())
+            except Exception as e:
+                print(f"Failed to close graph session: {e}")
+
         total_tasks = len(self._task_history)
         successful_tasks = sum(1 for t in self._task_history if t.success)
-        failed_tasks = total_tasks- successful_tasks
+        failed_tasks = total_tasks - successful_tasks
         session_duration = (datetime.now() - self._started_at).total_seconds() if self._started_at else 0
-
 
         emit(
             EventType.MEMORY_SESSION_ENDED,
             source='WorkingMemory',
-            session_id = self._session_id,
-            total_tasks = total_tasks,
-            successful_tasks= successful_tasks,
-            failed_tasks = failed_tasks,
-            duration_seconds = session_duration,
-            correction_recorded = len(self._corrections)
+            session_id=self._session_id,
+            total_tasks=total_tasks,
+            successful_tasks=successful_tasks,
+            failed_tasks=failed_tasks,
+            duration_seconds=session_duration,
+            correction_recorded=len(self._corrections)
         )
 
         self._session_id = None
         self._started_at = None
         self._last_activity = None
-        self._is_active = None
+        self._is_active = False
         self._conversation_history = []
         self._task_history = []
         self._current_task = None
@@ -906,37 +769,26 @@ class WorkingMemory:
         self._session_preferences = {}
         self._prior_context = []
 
-        print(f"Session ended. {successful_tasks}/{total_tasks} task succeeded. Duration: {session_duration:.1f}s")
+        print(f"Session ended. {successful_tasks}/{total_tasks} tasks succeeded. Duration: {session_duration:.1f}s")
 
-    def get_context_for_planner(self, intent:Intent)-> Dict[str,Any]:
-        context = {
-                   'session_id':self._session_id,
-                   'session_active' : self._is_active
-                   }
-        intent_pattern = self._build_intent_pattern(intent)
-        cached = graph_get_context(self._session_id, intent.raw_command)
-        if cached:
-            context["cached_plan"] = {
-                "steps":        cached.get("plan_steps_json"),
-                "strategy":     cached.get("plan_strategy"),
-                "use_count":    cached.get("use_count"),
-                "success_rate": cached.get("success_count", 0) /
-                                max(cached.get("use_count", 1), 1),
-            }
-            return context
+    def get_context_for_planner(self, intent: Intent) -> Dict[str, Any]:
+        # Start with graph context (includes cached_plan, recent_goals, preferences)
+        context = graph_get_context(self._session_id, intent.raw_command)
 
-        if len(self._conversation_history) >1:
-            recent = self._conversation_history[-4:-1] if len(self._conversation_history)>=4 else self._conversation_history[-1]
+        # Merge in-memory conversation history
+        if len(self._conversation_history) > 1:
+            recent = self._conversation_history[-4:] if len(self._conversation_history) >= 4 else self._conversation_history[-1:]
             context['recent_conversation'] = [
                 {
-                    'user_input':turn.user_input,
-                    'intent_aciton': turn.intent.action if turn.intent else None,
-                    'intent_target':turn.intent.target if turn.intent else None,
+                    'user_input': turn.user_input,
+                    'intent_action': turn.intent.action if turn.intent else None,
+                    'intent_target': turn.intent.target if turn.intent else None,
                     'success': turn.success
                 }
                 for turn in recent
             ]
 
+        # Add related tasks from this session
         related_tasks = []
         for task in self._task_history:
             if (task.intent.action == intent.action or task.intent.target == intent.target):
@@ -945,16 +797,17 @@ class WorkingMemory:
         if related_tasks:
             context['session_related_tasks'] = [
                 {
-                       "action": t.intent.action,
-                       "target": t.intent.target,
-                       "strategy": t.plan_strategy,
-                       "success": t.success,
-                       "error": t.error,
-                       "from_cache": t.from_cache
+                    "action": t.intent.action,
+                    "target": t.intent.target,
+                    "strategy": t.plan_strategy,
+                    "success": t.success,
+                    "error": t.error,
+                    "from_cache": t.from_cache
                 }
                 for t in related_tasks[-3:]
             ]
-        
+
+        # Add relevant corrections
         relevant_corrections = [
             c for c in self._corrections
             if (c.original_intent and (c.original_intent.action == intent.action or c.original_intent.target == intent.target))
@@ -963,24 +816,24 @@ class WorkingMemory:
         if relevant_corrections:
             context['user_corrections'] = [
                 {
-                       "original_target": c.original_intent.target if c.original_intent else None,
-                       "corrected_target": c.corrected_intent.target if c.corrected_intent else None,
-                       "note": f"User corrected '{c.original_input}' to '{c.corrected_input}'"      
+                    "original_target": c.original_intent.target if c.original_intent else None,
+                    "corrected_target": c.corrected_intent.target if c.corrected_intent else None,
+                    "note": f"User corrected '{c.original_input}' to '{c.corrected_input}'"
                 }
                 for c in relevant_corrections[-3:]
             ]
-        
+
+        # Merge session preferences
         if self._session_preferences:
             relevant_prefs = {}
-            
             if f"default_{intent.action}" in self._session_preferences:
                 relevant_prefs[f"default_{intent.action}"] = self._session_preferences[f"default_{intent.action}"]
-
             if "default_browser" in self._session_preferences:
                 relevant_prefs["default_browser"] = self._session_preferences["default_browser"]
-
             if relevant_prefs:
-                context["preferences"] = relevant_prefs
+                context.setdefault("preferences", {}).update(relevant_prefs)
+
+        # Add focus context
         focus = self.get_focus_context()
         if focus:
             context["focus"] = {
@@ -990,7 +843,7 @@ class WorkingMemory:
                 "document_path": focus.document_path,
                 "app_capabilities": focus.app_capabilities
             }
-        
+
         return context
 
     
