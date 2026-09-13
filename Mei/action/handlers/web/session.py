@@ -32,6 +32,63 @@ class BrowserSessionManager:
         self._lock = threading.Lock()
         self._connected = False
 
+    def _find_or_launch_cdp_url(self) -> str:
+        """Find a running browser with CDP enabled, or launch one."""
+        import psutil
+        import subprocess
+        import time
+
+        # 1. Look for existing running browsers with CDP
+        for proc in psutil.process_iter(['name', 'cmdline']):
+            try:
+                name = proc.info['name']
+                if name and name.lower() in ('chrome.exe', 'msedge.exe', 'brave.exe'):
+                    cmdline = proc.info['cmdline']
+                    if cmdline:
+                        for arg in cmdline:
+                            if arg.startswith('--remote-debugging-port='):
+                                port = arg.split('=')[1]
+                                return f"http://127.0.0.1:{port}"
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                pass
+
+        # 2. If not found, try default configured URL anyway
+        # (It might be running without psutil being able to read cmdline, or remote)
+        # But we don't want to blindly wait for timeout if it's not there.
+        # Let's launch one instead if nothing is explicitly configured differently than default.
+
+        # 3. Launch a new browser (Edge is usually available on Windows)
+        print("[WebSession] No CDP browser found. Launching Edge in debugging mode...")
+        import os
+        edge_path = r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
+        chrome_path = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
+        brave_path = r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe"
+
+        exe_to_run = None
+        for path in [brave_path, chrome_path, edge_path]:
+            if os.path.exists(path):
+                exe_to_run = path
+                break
+        
+        if exe_to_run:
+            # We must use a separate user data dir so it can run alongside a normal browser instance
+            user_data_dir = os.path.abspath("data/browser_profile")
+            os.makedirs(user_data_dir, exist_ok=True)
+            port = "9222"
+            cmd = [
+                exe_to_run,
+                f"--remote-debugging-port={port}",
+                f"--user-data-dir={user_data_dir}",
+                "--no-first-run",
+                "--no-default-browser-check",
+            ]
+            subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            time.sleep(2.0) # give it a moment to start CDP
+            return f"http://127.0.0.1:{port}"
+
+        # 4. Fallback to configured
+        return self._config.cdp_url
+
     def connect(self)->bool:
         """Connects to the browser via CDP"""
         if self._connected and self._browser and self._browser.is_connected():
@@ -41,36 +98,38 @@ class BrowserSessionManager:
             if self._connected and self._browser and self._browser.is_connected():
                 return True
 
-        try:
-            self._playwright = sync_playwright().start()
-            self._browser = self._playwright.chromium.connect_over_cdp(
-                self._config.cdp_url,
-                timeout=self._config.default_timeout_ms
-            )
+            try:
+                self._playwright = sync_playwright().start()
+                cdp_url = self._find_or_launch_cdp_url()
 
-            contexts  = self._browser.contexts
-            if contexts:
-                self._context = contexts[0]
-            else:
-                self._context = self._browser.new_context()
+                self._browser = self._playwright.chromium.connect_over_cdp(
+                    cdp_url,
+                    timeout=self._config.default_timeout_ms
+                )
 
-            self._connected = True
-            emit(EventType.ACTION_COMPLETED,
-                 source="BrowserSessionManager",
-                 action= "cdp_connect",
-                 data={"cdp_url": self._config.cdp_url})
+                contexts  = self._browser.contexts
+                if contexts:
+                    self._context = contexts[0]
+                else:
+                    self._context = self._browser.new_context()
 
-            print(f"[WebSession] Connected to browser at {self._config.cdp_url}")
-            return True
+                self._connected = True
+                emit(EventType.ACTION_COMPLETED,
+                     source="BrowserSessionManager",
+                     action= "cdp_connect",
+                     data={"cdp_url": cdp_url})
 
-        except Exception as e:
-            self._connected = False
-            emit(EventType.ERROR,
-                 source="BrowserSessionManager",
-                 error= str(e),
-                 operation="cdp_connect")
-            print(f"[WebSession] Failed to connect: {e}")
-            return False
+                print(f"[WebSession] Connected to browser at {cdp_url}")
+                return True
+
+            except Exception as e:
+                self._connected = False
+                emit(EventType.ERROR,
+                     source="BrowserSessionManager",
+                     error= str(e),
+                     operation="cdp_connect")
+                print(f"[WebSession] Failed to connect: {e}")
+                return False
 
     @property
     def is_connected(self)->bool:

@@ -57,6 +57,10 @@ class LLMEngine:
             if self._model_loaded:
                 return True
             try:
+                # Swap out any other GPU-resident model first
+                if self._gpu_layers != 0:
+                    _ensure_gpu_exclusive(self._name)
+
                 print(f"Loading Model [{self._name}]: {self._model_path} (GPU Layers: {self._gpu_layers})")
                 emit(event_type=EventType.LLM_LOADING, source=f"LLMEngine_{self._name}")
 
@@ -271,9 +275,33 @@ class LLMEngine:
 # _engine_instance:Optional[LLMEngine] = None
 
 _engines: Dict[str, LLMEngine] = {}
+_swap_lock = threading.Lock()
+_active_gpu_engine: Optional[str] = None   # name of the engine currently loaded on GPU
+
+
+def _ensure_gpu_exclusive(requester_name: str) -> None:
+    """Unload any other GPU-resident model before `requester_name` loads.
+
+    On a 4 GB laptop GPU the Phi-3.5 intent model (2.6 GB weights + 2.3 GB
+    KV-cache) already saturates VRAM.  Loading a second model simultaneously
+    causes a native crash.  This function enforces a strict one-model-at-a-time
+    policy: it unloads whatever is currently resident before the new model loads.
+    """
+    global _active_gpu_engine
+
+    with _swap_lock:
+        if _active_gpu_engine and _active_gpu_engine != requester_name:
+            other = _engines.get(_active_gpu_engine)
+            if other and other.is_loaded():
+                print(f"[LLMEngine] Swapping out '{_active_gpu_engine}' "
+                      f"to make room for '{requester_name}'")
+                other.unload()
+        _active_gpu_engine = requester_name
+
+
 def get_llm_engine(name: str = "default")->LLMEngine:
     global _engines
-    
+
     if name not in _engines:
         config = get_config()
         if name == "intent":
@@ -283,6 +311,6 @@ def get_llm_engine(name: str = "default")->LLMEngine:
         else:
             path = config.llm.model_path
         _engines[name] = LLMEngine(model_path=path, name=name)
-    
+
     return _engines[name]
 

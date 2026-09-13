@@ -1,22 +1,19 @@
 from ...core.config import get_config
-from ...core.events import emit, subscribe, EventType
+from ...core.events import emit, EventType
 from ...core.task import Intent, IntentSequence, IntentStep, StepExecutionStatus
 from ..llm.engine import get_llm_engine
 from typing import Optional, Dict, List, Any
 import json
 
 from .patterns import FAST_PATTERNS
-from .prompts import NLU_DECOMPOSE_PROMPT, NLU_VERIFY_PROMPT
+from .prompts import get_decompose_prompt, NLU_VERIFY_PROMPT
 
 
 class IntentExtractor:
 
     def __init__(self, auto_subscribe: bool = True):
         self._llm = get_llm_engine("intent")
-
-        if auto_subscribe:
-            subscribe(event_type=EventType.TRANSCRIBE_COMPLETED,handler=self._on_transcribe)
-            print("Subscribed to TRANSCRIBE_COMPLETED")
+        # TRANSCRIBE_COMPLETED is owned by the pipeline; this extractor is called directly.
         
         self._action_synonyms = {
             "launch":"open",
@@ -36,13 +33,6 @@ class IntentExtractor:
             "goto": "navigate",
         }
 
-    def _on_transcribe(self, event)->None:
-        text = event.data.get("text","")
-        if not text or not text.strip():
-            return
-        # Removed emit INTENT_RECOGNIZED since pipeline handles the flow now
-        pass
-    
     def _try_fast_extract(self, text: str) -> Optional[Intent]:
         for pattern, builder in FAST_PATTERNS:
             match = pattern.match(text)
@@ -69,7 +59,7 @@ class IntentExtractor:
 
         messages = [{"role":"user","content":raw_command}]
         print(f"Decomposing intent from: {raw_command}")
-        response = self._llm.chat_json(messages=messages, system_prompt=NLU_DECOMPOSE_PROMPT)
+        response = self._llm.chat_json(messages=messages, system_prompt=get_decompose_prompt())
         
         if not response:
             print("Failed to get LLM response for decompose")

@@ -1,11 +1,9 @@
-from .executor import PlanExecutor, get_executor, execute_plan, execute_action
+from .executor import PlanExecutor, get_executor
 from .context import ExecutionContext
 
 __all__ = [
     'PlanExecutor',
     'get_executor', 
-    'execute_plan',
-    'execute_action',
     'ExecutionContext',
 ]
 

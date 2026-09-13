@@ -1,0 +1,67 @@
+/* Mei TUI — layout stylesheet */
+
+Screen {
+    background: $background;
+}
+
+Header {
+    background: $primary-darken-2;
+    color: $text;
+    height: 1;
+}
+
+Footer {
+    background: $primary-darken-2;
+    height: 1;
+}
+
+/* 2-column, 2-row grid.
+   Left column: PipelinePane (top) + ModelPane + MemoryPane (stacked bottom).
+   Right column: TracePane spans both rows. */
+#main-grid {
+    grid-size: 2 3;
+    grid-rows: 2fr 1fr 1fr;
+    grid-columns: 1fr 2fr;
+    height: 1fr;
+    margin: 0 0 1 0;
+}
+
+PipelinePane {
+    row-span: 1;
+    column-span: 1;
+    border: solid $primary;
+    padding: 0 1;
+}
+
+TracePane {
+    row-span: 3;
+    column-span: 1;
+    border: solid $accent;
+    padding: 0 1;
+}
+
+ModelPane {
+    row-span: 1;
+    column-span: 1;
+    border: solid $primary;
+    padding: 0 1;
+}
+
+MemoryPane {
+    row-span: 1;
+    column-span: 1;
+    border: solid $primary;
+    padding: 0 1;
+}
+
+#cmd-input {
+    dock: bottom;
+    height: 3;
+    border: solid $accent;
+    margin: 0;
+}
+
+/* Wipe confirmation dialog */
+WipeConfirm {
+    align: center middle;
+}

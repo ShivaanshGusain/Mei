@@ -40,8 +40,8 @@ class ObservationBuilder:
         )
 
         if verify_result is not None:
-            obs.verified = verify_result.confidence
-            obs.verify_confidence = VerifyResult.confidence
+            obs.verified = verify_result.verified
+            obs.verify_confidence = verify_result.confidence
             obs.verify_reason = verify_result.reason
 
         self._collect_window_state(obs)

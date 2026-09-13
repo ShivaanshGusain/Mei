@@ -12,7 +12,7 @@ from ...core.config import ActionResult, VerifyResult, ElementReference
 from ...perception.System.windows import get_window_manager
 from ...perception.System.accessibility import UIAutomationManager
 from ...perception.Visual.screen import ScreenCapture
-from ...perception.Visual.analyzer import get_visual_analyzer
+# from ...perception.Visual.analyzer import get_visual_analyzer
 
 import pyautogui
 from ..context import ExecutionContext
@@ -587,6 +587,7 @@ def _click_via_ui_automation(self, query:str, element_type:Optional[str], contex
     return result
 
 def _click_via_visual(self, query:str, element_type:Optional[str], context: ExecutionContext, click_type:str)->ActionResult:
+    from ...perception.Visual.analyzer import get_visual_analyzer
     try:
         visual_analyzer = get_visual_analyzer()
 

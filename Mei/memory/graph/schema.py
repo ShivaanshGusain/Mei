@@ -8,6 +8,17 @@ KUZU_SCHEMA = [
     session_id          STRING,
     created_at          STRING,
     embedding           FLOAT[384],
+    stability_score     DOUBLE,
+    success_count       INT64 DEFAULT 0,
+    fail_count          INT64 DEFAULT 0,
+    last_executed_at    STRING,
+    PRIMARY KEY (id))
+    """,
+    """
+    CREATE NODE TABLE IF NOT EXISTS SchemaVersion (
+    id                  STRING,
+    version             INT64,
+    applied_at          STRING,
     PRIMARY KEY (id))
     """,
     """

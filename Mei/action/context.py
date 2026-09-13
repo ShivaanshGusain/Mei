@@ -1,13 +1,12 @@
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 from ..core.config import WindowInfo, ElementReference, ActionResult
-from ..core.task import Plan, Intent, Step
 from ..perception.System.windows import get_window_manager
 
 
 class ExecutionContext:
 
-    def __init__(self, plan:Plan, intent: Intent):
+    def __init__(self, plan:Optional[Any]=None, intent:Optional[Any]=None):
         self.plan  = plan
         self.intent = intent
         
@@ -23,10 +22,7 @@ class ExecutionContext:
 
     @classmethod
     def empty(cls) -> "ExecutionContext":
-        from ..core.task import Intent, Plan
-        empty_intent = Intent(action="unknown", raw_command="")
-        empty_plan = Plan(strategy="empty", reasoning="", steps=[])
-        return cls(plan=empty_plan, intent=empty_intent)
+        return cls(plan=None, intent=None)
 
     @property
     def current_window(self) -> Optional[WindowInfo]:
@@ -92,48 +88,48 @@ class ExecutionContext:
         elapsed = datetime.now() - self.start_time
         return elapsed.total_seconds()*1000
     
-    def get_current_step(self)->Optional["Step"]:
-        from ..core.task import Step
-        if 0 <= self.current_step_index < len(self.plan.steps):
+    def get_current_step(self)->Optional[Any]:
+        if self.plan and hasattr(self.plan, 'steps') and 0 <= self.current_step_index < len(self.plan.steps):
             return self.plan.steps[self.current_step_index]
         return None
 
     def to_dict(self)->Dict[str,Any]:
-        return {
-            "intent":{
-                'action':self.intent.action,
-                'target':self.intent.target,
-                'parameters': self.intent.parameters,
-                'raw_command':self.intent.raw_command
-            },
-            'plan': {
-                'strategy':self.plan.strategy,
-                'step_count': len(self.plan.steps),
-                'steps':[
+        d = {}
+        if self.intent:
+            d["intent"] = {
+                'action': getattr(self.intent, 'action', ''),
+                'target': getattr(self.intent, 'target', ''),
+                'parameters': getattr(self.intent, 'parameters', {}),
+                'raw_command': getattr(self.intent, 'raw_command', '')
+            }
+        if self.plan:
+            steps = getattr(self.plan, 'steps', [])
+            d['plan'] = {
+                'strategy': getattr(self.plan, 'strategy', ''),
+                'step_count': len(steps),
+                'steps': [
                     {
-                        'action': step.action,
-                        'parameters':step.parameters,
-                        'description': step.description
+                        'action': getattr(step, 'action', ''),
+                        'parameters': getattr(step, 'parameters', {}),
+                        'description': getattr(step, 'description', '')
                     }
-                    for step in self.plan.steps
+                    for step in steps
                 ]
-        },
-        "current_window": {
+            }
+        d["current_window"] = {
             'hwnd': self._current_window.hwnd,
             'title': self._current_window.title,
             'process': self._current_window.process_name
-        } if self._current_window else None,
-        "current_step_index": self.current_step_index,
-        "elapsed_ms": self.elapsed_time_ms(),
-        'step_results': [
+        } if self._current_window else None
+        d["current_step_index"] = self.current_step_index
+        d["elapsed_ms"] = self.elapsed_time_ms()
+        d['step_results'] = [
             {
             'success': r.success,
             'method_used': r.method_used,
             'error': r.error
         } for r in self.step_results
-        ],
-        "variables": self.variables,
-        "cached_elements": list(self._found_elements.keys())
-        }
-    
-    
+        ]
+        d["variables"] = self.variables
+        d["cached_elements"] = list(self._found_elements.keys())
+        return d

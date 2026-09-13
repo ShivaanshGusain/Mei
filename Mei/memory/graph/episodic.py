@@ -11,7 +11,8 @@ def write_episode(
     intent: dict,               # {action, target, raw_command, parameters, confidence}
     step_results: list[dict],   # [{action, parameters, duration_ms, success, error, method_used, data}]
     success: bool,
-    duration_ms: float
+    duration_ms: float,
+    stability_score: float = 0.5,
 ) -> None:
     try:
         conn = get_kuzu_connection()
@@ -37,7 +38,8 @@ def write_episode(
             target: $target,
             session_id: $session_id,
             created_at: $now,
-            embedding: $embedding
+            embedding: $embedding,
+            stability_score: $stability_score
         })
         """
         conn.execute(goal_query, {
@@ -47,7 +49,8 @@ def write_episode(
             'target': intent_target,
             'session_id': session_id,
             'now': now,
-            'embedding': embedding
+            'embedding': embedding,
+            'stability_score': float(stability_score),
         })
         
         # 2. Create edge Goal -[PART_OF_SESSION]-> Session

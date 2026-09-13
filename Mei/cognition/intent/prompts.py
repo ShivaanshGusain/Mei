@@ -1,4 +1,4 @@
-NLU_DECOMPOSE_PROMPT = """
+NLU_DECOMPOSE_PROMPT_TEMPLATE = """
   You are a task decomposition system for a Windows desktop automation assistant (Mei).
   Given a user command, break it down into an ordered JSON array of atomic sub-goals.
 
@@ -53,11 +53,42 @@ NLU_DECOMPOSE_PROMPT = """
                example: "run npm install", "check CPU usage"
 
   "utility"  → timing and flow control
-               tools: wait, navigate_url
-               example: "wait 2 seconds", "open youtube.com in browser"
+               tools: wait
+               example: "wait 2 seconds"
+
+  ──────────────── SYSTEM PATHS ────────────────
+  User Home: {USER_HOME}
+  User Desktop: {USER_DESKTOP}
+  User Downloads: {USER_DOWNLOADS}
 
   Return ONLY the JSON array, no extra text.
+    ──────────────── EXAMPLES ────────────────
+  Input: "create a file called modulo.py on the Desktop"
+  Output: [{"step_id":1,"description":"Create file modulo.py on the Desktop",
+    "expected_output":"File modulo.py exists at {USER_DESKTOP}/modulo.py",
+    "domain":"file","target":"modulo.py",
+    "parameters":{"path":"{USER_DESKTOP}/modulo.py"}}]
+
+  Input: "open brave and search cats on youtube"
+  Output: [{"step_id":1,"description":"Launch Brave browser","domain":"app","target":"Brave",...},
+   {"step_id":2,"description":"Navigate to YouTube","domain":"web",...},
+   {"step_id":3,"description":"Search for cats","domain":"web",...}]
   """
+
+def get_decompose_prompt() -> str:
+    from pathlib import Path
+    home = Path.home()
+    desktop = home / "Desktop"
+    if not desktop.exists():
+        desktop = home / "OneDrive" / "Desktop"
+    
+    return NLU_DECOMPOSE_PROMPT_TEMPLATE.replace(
+        "{USER_HOME}", str(home).replace('\\', '/')
+    ).replace(
+        "{USER_DESKTOP}", str(desktop).replace('\\', '/')
+    ).replace(
+        "{USER_DOWNLOADS}", str(home / "Downloads").replace('\\', '/')
+    )
 
 NLU_VERIFY_PROMPT = """
 You are evaluating a proposed macro (a cached sequence of actions) to see if it correctly and safely satisfies a new user command.

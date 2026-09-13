@@ -6,7 +6,7 @@ from typing import Dict, Any, Optional, List
 from datetime import datetime
 import json
 from ..core.config import ConversationTurn, SessionTask,UserCorrection, FocusContext, AppCapabilities
-from ..core.task import Intent, Plan
+from ..core.task import Intent
 from ..core.events import EventType, Event, subscribe, emit
 
 from ..perception.System.windows import get_window_manager, WindowManager
@@ -240,7 +240,6 @@ class WorkingMemory:
         subscribe(EventType.AGENT_STOPPED, self._on_agent_stopped)
         subscribe(EventType.TRANSCRIBE_COMPLETED, self._on_transcribe_completed)
         subscribe(EventType.INTENT_RECOGNIZED, self._on_intent_recognized)
-        subscribe(EventType.PLAN_CREATED, self._on_plan_created)
         subscribe(EventType.PLAN_COMPLETED, self._on_plan_completed)
         subscribe(EventType.PLAN_FAILED, self._on_plan_failed)
         subscribe(EventType.PLAN_STEP_COMPLETED, self._on_plan_step_completed)
@@ -549,85 +548,50 @@ class WorkingMemory:
         return any(phrase in lower_text for phrase in explicit_phrases)
     
     def _on_plan_created(self, event:Event)->None:
-
-        if not self._is_active:
-            return
-        
-        with self._lock:
-            plan = event.data.get('plan')
-            intent = event.data.get('intent')
-            from_cache = event.data.get('from_cache', False)
-
-            if plan is None or intent is None:
-                return
-            
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            random_suffix = secrets.token_hex(4)
-            task_id = f"exec_{timestamp}_{random_suffix}"
-
-            task = SessionTask(
-                task_id= task_id,
-                intent = intent,
-                plan_strategy=plan.strategy if hasattr(plan,'strategy') else 'unknown',
-                started_at=datetime.now(),
-                completed_at=None,
-                success= None,
-                error = None,
-                from_cache=from_cache
-            )
-
-            self._current_task = task
-
-            if self._conversation_history:
-                self._conversation_history[-1].task_id = task_id
-            
-            self._last_activity = datetime.now()
-
-    
+        pass
     def _on_plan_completed(self, event:Event)->None:
         if not self._is_active:
             return
         
-        intent = event.data.get('intent')
-        if self._current_task is None and not intent:
-            print("PLAN_COMPLETED but no current task or intent data")
-            return
-        
         with self._lock:
-            execution_id = event.data.get("execution_id", self._current_task.task_id)
-            
-            if not execution_id and self._current_task:
-                execution_id = self._current_task.task_id
-            
-            intent = event.data.get("intent", self._current_task.intent)
-
-            if not intent and self._current_task:
-                intent = self._current_task.intent
-
-            duration_ms = event.data.get("duration_ms", 0.0)
-            plan = event.data.get("plan")
-            step_results = event.data.get("step_results", [])
-            context = event.data.get("context")
+            intent = event.data.get("intent")
+            execution_id = event.data.get("execution_id")
             success = event.data.get("success", True)
+            
+            if not execution_id:
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                random_suffix = secrets.token_hex(4)
+                execution_id = f"exec_{timestamp}_{random_suffix}"
 
-            if self._current_task:
-                self._current_task.task_id = execution_id
-                self._current_task.completed_at = datetime.now()
-                self._current_task.success = success
-                self._current_task.error = None
+            if self._current_task is None:
+                self._current_task = SessionTask(
+                    task_id=execution_id,
+                    intent=intent,
+                    plan_strategy="unknown",
+                    started_at=datetime.now(),
+                    completed_at=None,
+                    success=None,
+                    error=None,
+                    from_cache=False
+                )
 
-                self._task_history.append(self._current_task)
+            self._current_task.task_id = execution_id
+            self._current_task.completed_at = datetime.now()
+            self._current_task.success = success
+            self._current_task.error = None
 
-                while len(self._task_history) > self._max_task_history:
-                    self._task_history.pop(0)
+            self._task_history.append(self._current_task)
 
-                completed_task = self._current_task
-                self._current_task = None
+            while len(self._task_history) > self._max_task_history:
+                self._task_history.pop(0)
+
+            completed_task = self._current_task
+            self._current_task = None
 
             if self._conversation_history:
                 for turn in reversed(self._conversation_history):
-                    if turn.task_id == completed_task.task_id or turn.task_id == execution_id:
-                        turn.success = True
+                    if turn.task_id == completed_task.task_id or turn.task_id == execution_id or not turn.task_id:
+                        turn.success = success
                         turn.task_id = execution_id
                         break
                 
@@ -636,7 +600,7 @@ class WorkingMemory:
                 EventType.MEMORY_STORED,
                 source="WorkingMemory",
                 execution_id = execution_id,
-                success = True
+                success = success
             )
 
             self._last_activity = datetime.now()

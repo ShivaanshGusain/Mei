@@ -55,7 +55,6 @@ class EventType(Enum):
     ENTITIES_EXTRACTED = auto()
     
     # Planning
-    PLAN_CREATED = auto()
     PLAN_STEP_STARTED = auto()
     PLAN_STEP_COMPLETED = auto()
     PLAN_STEP_FAILED = auto()

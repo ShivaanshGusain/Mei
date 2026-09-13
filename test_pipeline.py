@@ -13,13 +13,13 @@ def run_e2e_test():
     # Command to test
     test_command = "Create a file with the name 'modulo.py'."
 
-    print(f"--- RUN 1: COLD RUN (Decomposition) ---")
-    print(f"Command: {test_command}")
+    # print(f"--- RUN 1: COLD RUN (Decomposition) ---")
+    # print(f"Command: {test_command}")
     
-    # FIX: Initialize the empty context and pass it in
-    context_1 = ExecutionContext.empty()
-    success_1 = process_user_command(test_command, context_1)
-    print(f"Run 1 Success: {success_1}\n")
+    # # FIX: Initialize the empty context and pass it in
+    # context_1 = ExecutionContext.empty()
+    # success_1 = process_user_command(test_command, context_1)
+    # print(f"Run 1 Success: {success_1}\n")
 
     # Give Kùzu a second to finalize disk writes
     time.sleep(1)

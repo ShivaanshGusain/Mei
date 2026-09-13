@@ -1,4 +1,4 @@
-from ...core.task import IntentStep, IntentSequence
+from ...core.task import IntentStep
 from ...core.config import ActionResult
 from ...action.context import ExecutionContext
 
@@ -39,17 +39,14 @@ def verify_step(step: IntentStep, result: ActionResult, context: ExecutionContex
               return (False, f"Target '{step.target}' not found in current URL '{url}'")
         
     elif domain == "file":
-        import os
-        path = step.parameters.get("path") or step.target
-        if path and not os.path.exists(path):
-            return (False, f"Expected path '{path}' does not exist")
+      import os
+      # Use the actual path from the tool result, not the step parameters
+      path = (result.data.get("path") if isinstance(result.data, dict) else None) \
+             or step.parameters.get("path") \
+             or step.target
+      if path:
+          resolved = os.path.abspath(path)
+          if not os.path.exists(resolved):
+              return (False, f"Expected path '{resolved}' does not exist")
         
     return (True, "Success")
-
-class GoalVerifier:
-    def __init__(self):
-        pass
-
-    def verify(self, sequence: IntentSequence, context: ExecutionContext) -> bool:
-        """Verify if the ultimate goal of the sequence has been achieved."""
-        return sequence.is_complete()

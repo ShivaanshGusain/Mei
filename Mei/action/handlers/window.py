@@ -11,7 +11,8 @@ from ..context import ExecutionContext
 
 from ...perception.System.accessibility import UIAutomationManager, UIElement
 from ...perception.Visual.screen import ScreenCapture
-from ...perception.Visual.analyzer import get_visual_analyzer, VisualElement
+if TYPE_CHECKING:
+    from ...perception.Visual.analyzer import get_visual_analyzer, VisualElement
 
 
 import time
@@ -882,6 +883,8 @@ def _find_element_find_via_ui_automation(query:str, element_type:Optional[str], 
         return None
     
 def _find_element_find_via_visual(self, query:str, element_type:Optional[str], hwnd:int)->Optional[Tuple[VisualElement, ElementReference]]:
+    from ...perception.Visual.analyzer import get_visual_analyzer,  VisualElement
+    visual_analyzer = get_visual_analyzer()
     try:
         visual_analyzer = get_visual_analyzer()
         if not visual_analyzer.is_loaded():
@@ -1053,188 +1056,5 @@ def register_window_tools(executor: PlanExecutor):
         validate_fn=find_element_validate,
         verify_fn=find_element_verify,
         description="find the given element in the window",
-        requires_screen=True,
+        requires_screen=True
     )
-
-"""
-Previous
-
-WINDOW_HANDLERS = [
-    FindWindowHandler,
-    VerifyWindowHandler,
-    FocusWindowHandler,
-    MinimizeWindowHandler,
-    MaximizeWindowHandler,
-    RestoreWindowHandler,
-    CloseWindowHandler,
-    FindElementHandler,
-    TypeTextHandler,
-    HotkeyHandler,
-    ClickHandler,
-    ScrollHander
-]
-
-def get_window_handlers()->list:
-    return [handler_class() for handler_class in WINDOW_HANDLERS]
-
-
-if __name__ == "__main__":                                   
-    import time                                              
-    from ...core.task import Plan, Intent, Step, StepStatus 
-    from ...action.context import ExecutionContext          
-                                                             
-    time.sleep(2)                                            
-                                                             
-    dummy_intent = Intent(                                   
-        action="test",                                       
-        target="windows",                                    
-        raw_command="testing window handlers"                
-    )                                                        
-    dummy_plan = Plan(steps=[], strategy="test")             
-    context = ExecutionContext(dummy_plan, dummy_intent)     
-                                                             
-    print("\nTEST 1: FocusWindowHandler")                    
-    print("-" * 40)                                          
-                                                             
-    focus_handler = FocusWindowHandler()                     
-    print(f"  action_name: {focus_handler.action_name}")     
-    print(f"  supports_verification: {focus_handler.supports_verification}")
-                                                             
-    # Test validation - missing params                       
-    is_valid, error = focus_handler.validate({})             
-    print(f"  validate({{}}): valid={is_valid}, error={error}")    
-    assert not is_valid, "Should fail with empty params"     
-                                                             
-    # Test validation - valid params                         
-    is_valid, error = focus_handler.validate({"query": "Code"}) 
-    print(f"  validate({{query:'Code'}}): valid={is_valid}")    
-    assert is_valid, "Should pass with query"                
-                                                             
-    # Test execution                                         
-    result = focus_handler.execute({"query": "Code"}, context)  
-    print(f"  execute result: success={result.success}")     
-    if result.success:                                       
-        print(f"    hwnd: {result.data.get('hwnd')}")        
-        print(f"    title: {result.data.get('title')}")      
-        print(f"    context.current_window set: {context.current_window is not None}")
-                                                             
-        # Test verification                                  
-        verify = focus_handler.verify({"query": "Code"}, context, result)
-        print(f"  verify: verified={verify.verified}, confidence={verify.confidence}")
-        print(f"    reason: {verify.reason}")                
-    else:                                                    
-        print(f"    error: {result.error}")                  
-                                                             
-    time.sleep(1)                                            
-                                                            
-    print("\nTEST 2: MinimizeWindowHandler")                 
-    print("-" * 40)                                          
-                                                             
-    minimize_handler = MinimizeWindowHandler()               
-                                                             
-    # First focus notepad                                    
-    focus_handler.execute({"query": "VSCODE"}, context)     
-    time.sleep(0.5)                                          
-                                                             
-    # Test minimize with empty params (uses current window)  
-    is_valid, error = minimize_handler.validate({})          
-    print(f"  validate({{}}): valid={is_valid} (empty params OK)") 
-                                                             
-    result = minimize_handler.execute({}, context)           
-    print(f"  execute (current window): success={result.success}") 
-    if result.success:                                       
-        print(f"    minimized: {result.data.get('title')}")  
-        print(f"    context.current_window cleared: {context.current_window is None}")
-                                                             
-        verify = minimize_handler.verify({}, context, result)
-        print(f"  verify: verified={verify.verified}")       
-    else:                                                    
-        print(f"    error: {result.error}")                  
-                                                             
-    time.sleep(1)                                            
-                                                             
-    print("\nTEST 3: RestoreWindowHandler")                  
-    print("-" * 40)                                          
-                                                             
-    restore_handler = RestoreWindowHandler()                 
-                                                             
-    # Restore the minimized notepad                          
-    result = restore_handler.execute({"query": "brave"}, context)
-    print(f"  execute: success={result.success}")            
-    if result.success:                                       
-        print(f"    restored: {result.data.get('title')}")   
-        print(f"    context.current_window set: {context.current_window is not None}")
-                                                             
-        verify = restore_handler.verify({"query": "brave"}, context, result)
-        print(f"  verify: verified={verify.verified}")       
-    else:                                                    
-        print(f"    error: {result.error}")                  
-                                                             
-    time.sleep(1)                                            
-                                                             
-    print("\nTEST 4: MaximizeWindowHandler")                 
-    print("-" * 40)                                          
-                                                             
-    maximize_handler = MaximizeWindowHandler()               
-                                                             
-    # Maximize calculator                                    
-    result = maximize_handler.execute({"query": "calculator"}, context)
-    print(f"  execute: success={result.success}")            
-    if result.success:                                       
-        print(f"    maximized: {result.data.get('title')}")  
-                                                             
-        verify = maximize_handler.verify({"query": "calculator"}, context, result)
-        print(f"  verify: verified={verify.verified}")       
-    else:                                                    
-        print(f"    error: {result.error}")                  
-                                                             
-    time.sleep(1)                                            
-                                                             
-    # Restore calculator                                     
-    restore_handler.execute({"query": "calculator"}, context)
-                                                             
-    print("\nTEST 5: CloseWindowHandler")                    
-    print("-" * 40)                                          
-    print("  Skipping close test to preserve your windows")  
-    print("  To test manually:")                             
-    print("    close_handler = CloseWindowHandler()")        
-    print("    result = close_handler.execute({'query': 'notepad'}, context)")
-                                                             
-    close_handler = CloseWindowHandler()                     
-    is_valid, error = close_handler.validate({"query": "notepad"}) 
-    print(f"  validate: valid={is_valid}")                   
-                                                             
-    # ─────────────────────────────────────────────────────────────────   
-    # TEST 6: Error cases                                    
-    # ─────────────────────────────────────────────────────────────────   
-    print("\nTEST 6: Error Cases")                           
-    print("-" * 40)                                          
-                                                             
-    # Non-existent window                                    
-    result = focus_handler.execute({"query": "nonexistent_window_xyz"}, context)
-    print(f"  focus non-existent: success={result.success}") 
-    print(f"    error: {result.error}")                      
-                                                             
-    # Invalid hwnd type                                      
-    is_valid, error = focus_handler.validate({"hwnd": "not_a_number"})   
-    print(f"  validate invalid hwnd: valid={is_valid}")      
-    print(f"    error: {error}")                             
-                                                             
-    # Empty query                                            
-    is_valid, error = focus_handler.validate({"query": ""})  
-    print(f"  validate empty query: valid={is_valid}")       
-    print(f"    error: {error}")                             
-                                                             
-    print("\nTEST 7: Handler Registration")                  
-    print("-" * 40)                                          
-                                                             
-    handlers = get_window_handlers()                         
-    print(f"  Total window handlers: {len(handlers)}")       
-    for h in handlers:                                       
-        print(f"    - {h.action_name} (verify: {h.supports_verification})")
-                                                             
-    print("\n" + "=" * 60)                                   
-    print("WINDOW HANDLERS TEST COMPLETE")                   
-    print("=" * 60)                                          
-                                                             
-"""

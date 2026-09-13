@@ -63,9 +63,7 @@ class Observation:
         
         if self.open_windows:
             lines.append(f"Open windows: {self.open_windows}")
-        if self.target_running:
-            lines.append(f"target_running: {self.target_running}")
-        
+
         if self.target_running is not None:
             lines.append(f"Target app running: {self.target_running}")
         
@@ -134,7 +132,7 @@ class ManagedProcess:
     command: str
     process: 'subprocess.Popen'
     started_at: datetime = field(default_factory=datetime.now)
-    log_buffer: 'deque' = field(default_factory=lambda:'deque'(maxlen=500))
+    log_buffer: 'deque' = field(default_factory=lambda: __import__('collections').deque(maxlen=500))
     _reader_thread: Optional['threading.Thread'] = field(default=None, repr=False)
 
 
@@ -372,10 +370,10 @@ class LLMConfig:
     intent_model_path: str = str(Path(__file__).parent.parent.parent/"models"/"Phi-3.5-mini-instruct.Q5_K_M.gguf")
     planner_model_path: str = str(Path(__file__).parent.parent.parent/"models"/"xLAM-2-1B-fc-r-Q4_0.gguf")
 
-    intent_gpu_layers: int = 0
-    intent_context_length: int = 6144
+    intent_gpu_layers: int = -1
+    intent_context_length: int = 2048
     planner_gpu_layers: int = -1
-    planner_context_length: int = 2048 #4064 #6144     
+    planner_context_length: int = 4096
 @dataclass
 class ActionResult:
     success:bool

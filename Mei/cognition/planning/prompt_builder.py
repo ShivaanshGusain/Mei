@@ -28,7 +28,6 @@ TOOL_REGISTRY = {
     "web_get_state":            "Get current web page content, links, or inputs",
     "web_wait_for":             "Wait for a web element to become visible or hidden",
     "web_scroll":               "Scroll the web page up or down via Playwright",
-    "navigate_url":             "Open a URL in the native browser window via keyboard",
     "run_shell_command":        "Run a shell command and return stdout and stderr",
     "start_background_process": "Start a long-running background process, returns PID",
     "get_process_logs":         "Read recent output from a managed background process",
@@ -131,10 +130,6 @@ TOOL_DETAIL = {
     "web_scroll": (
         'web_scroll(direction: "up"|"down", amount?: int)\n'
         '  Scroll the web page.'
-    ),
-    "navigate_url": (
-        'navigate_url(url: str, new_tab?: bool)\n'
-        '  Open a URL using the existing native browser window via keyboard. No CDP required.'
     ),
     "run_shell_command": (
         'run_shell_command(command: str, timeout?: int)\n'
@@ -300,6 +295,14 @@ def _get_env_state(step: IntentStep, context: ExecutionContext) -> str:
 
       if domain in ("system", "file"):
           try:
+              home = Path.home()
+              desktop = home / "Desktop"
+              if not desktop.exists():
+                  desktop = home / "OneDrive" / "Desktop"
+              lines.append(f"USER HOME: {home}")
+              lines.append(f"USER DESKTOP: {desktop}")
+              lines.append(f"USER DOWNLOADS: {home / 'Downloads'}")
+              
               # Use agent's virtual cwd, not the process cwd
               cwd = context.get_variable("cwd") or os.getcwd()
               try:
@@ -313,18 +316,26 @@ def _get_env_state(step: IntentStep, context: ExecutionContext) -> str:
                   lines.append(f"CWD: {cwd} (cannot list files)")
               except FileNotFoundError:
                   lines.append(f"CWD: {cwd} (directory not found)")
-          except Exception:
-              pass
+          except Exception as e:
+              print(f"[EnvState] cwd inspection failed: {e}")
 
           # Inject allowed write roots from guardrails
           try:
               from ...security.guardrails_manager import get_guardrails
               roots = [str(r) for r in get_guardrails().rules.allowed_write_roots]
               if roots:
-                  lines.append(f"ALLOWED WRITE ROOTS: {', '.join(roots)}")
-                  lines.append("NOTE: You may only create/write/delete files inside ALLOWED WRITE ROOTS.")
-          except Exception:
-              pass
+                  lines.append(f"ALLOWED WRITE ROOTS (you must write INSIDE these, not to the root itself):")
+                  for root in roots:
+                      lines.append(f"  - {root}\\<your_filename>")
+                  
+                  step_lower = step.description.lower() if step.description else ""
+                  if "desktop" in step_lower:
+                      lines.append(f"EXAMPLE: {desktop}\\modulo.py")
+                  else:
+                      lines.append(f"EXAMPLE: {roots[0]}\\modulo.py")
+                  lines.append("RULE: Always combine a root with the target filename. Never use a root path alone as 'path'.")
+          except Exception as e:
+              print(f"[EnvState] guardrails inspection failed: {e}")
 
       elif domain == "app":
           try:
@@ -339,12 +350,42 @@ def _get_env_state(step: IntentStep, context: ExecutionContext) -> str:
                       lines.append(f"RUNNING: {proc_list}")
                   else:
                       lines.append(f"RUNNING: no processes matching '{target}' found")
-          except Exception:
-              pass
+          except Exception as e:
+              print(f"[EnvState] process inspection failed: {e}")
 
       if not lines:
           return ""
       return "\nENVIRONMENT:\n" + "\n".join(f"  {l}" for l in lines)
+
+def _format_last_observation(last_obs: Any) -> str:
+    if not last_obs:
+        return ""
+
+    if hasattr(last_obs, "to_prompt_str"):
+        summary = last_obs.to_prompt_str()
+        if not summary:
+            return ""
+        return "\nLAST OBSERVATION:\n" + "\n".join(f"  {line}" for line in summary.splitlines())
+
+    if isinstance(last_obs, str):
+        return f"\nLAST OBSERVATION:\n  {last_obs}"
+
+    if isinstance(last_obs, dict):
+        lines = []
+        field_labels = (
+            ("foreground_window", "Current window"),
+            ("foreground_process", "Current process"),
+            ("focused_element", "Focused element"),
+            ("target_running", "Target app running"),
+        )
+        for key, label in field_labels:
+            if key in last_obs and last_obs[key] is not None:
+                lines.append(f"{label}: {last_obs[key]}")
+        if not lines:
+            return ""
+        return "\nLAST OBSERVATION:\n" + "\n".join(f"  {line}" for line in lines)
+
+    return f"\nLAST OBSERVATION:\n  {last_obs}"
 
 def build_step_prompt(step: IntentStep, context: ExecutionContext) -> tuple:
     """
@@ -370,6 +411,8 @@ def build_step_prompt(step: IntentStep, context: ExecutionContext) -> tuple:
         if name in TOOL_DETAIL
     )
 
+    obs_block = _format_last_observation(context.get_variable("last_observation"))
+        
     # ── Completed steps context ──────────────────────────────────────────────
     completed = context.get_variable("completed_steps", [])
     steps_so_far = ""
@@ -381,16 +424,29 @@ def build_step_prompt(step: IntentStep, context: ExecutionContext) -> tuple:
     cdp_active = context.get_variable("browser_cdp_active", False)
     env_state = _get_env_state(step, context)
 
+    # ── Healing context (injected when recovering from a prior failure) ──────
+    heal_ctx = context.get_variable("heal_context")
+    heal_block = ""
+    if heal_ctx:
+        heal_block = f"""
+HEALING CONTEXT:
+  Original command: {heal_ctx.get('original_command', '')}
+  Steps completed before failure:
+{heal_ctx.get('succeeded', '  (none)')}
+  Failed step: {heal_ctx.get('failed_tool', '')}({heal_ctx.get('failed_params', '')})
+  Failure reason: {heal_ctx.get('failure_reason', '')}
+  You are now fixing and completing the remaining steps.
+"""
+
     prompt = f"""USER GOAL: {step.description}
 EXPECTED OUTCOME: {step.expected_output}
 DOMAIN: {step.domain}
 ACTIVE WINDOW: {context.get_variable('current_window_title', 'Desktop')}
 CURRENT URL: {context.get_variable('current_url', '')}
-BROWSER CDP ACTIVE: {cdp_active}{env_state}
+{obs_block + chr(10) if obs_block else ""}BROWSER CDP ACTIVE: {cdp_active}{env_state}
 CWD: {context.get_variable('cwd', '')}
 PREFERENCES: {pref_str or 'None'}
-LAST ERROR (IF RETRY): {context.get_variable('last_step_error', 'None')}{steps_so_far}
-
+LAST ERROR (IF RETRY): {context.get_variable('last_step_error', 'None')}{steps_so_far}{heal_block}
 AVAILABLE ACTIONS:
 {mini_catalog}
 

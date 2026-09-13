@@ -53,46 +53,49 @@ CREATE_SCHEMA = {
 }
 
 def create_validate(params):
-    path = params.get("path")
-    if not path:
-        return (False, "Missing 'path' parameter")
-    valid, err, resolved = validate_path_safe(path, allow_write= True)
-    if not valid:
-        return (False, err)
-    if resolved.exists():
-        return (False, f"Already Exists: {resolved}")
-    return (True, None)
+      path = params.get("path")
+      if not path:
+          return (False, "Missing 'path' parameter")
+      valid, err, resolved = validate_path_safe(path, allow_write=True)
+      if not valid:
+          return (False, err)
+      # Don't fail if it already exists — execute will handle idempotency
+      return (True, None)
 
 def create_execute(params, context):
-    _,_,path = validate_path_safe(params["path"], allow_write=True)
-    is_dir = params.get("is_dir", False)
-    content = params.get("content", "")
+      _, _, path = validate_path_safe(params["path"], allow_write=True)
+      is_dir = params.get("is_dir", False)
+      content = params.get("content", "")
 
-    try:
-        if is_dir:
-            path.mkdir(parents=True, exist_ok=True)
+      try:
+          if is_dir:
+              path.mkdir(parents=True, exist_ok=True)
+              return ActionResult(
+                  success=True,
+                  data={"path": str(path), "type": "directory",
+                        "already_existed": path.exists()},
+                  method_used="filesystem"
+              )
+          else:
+              if path.exists():
+                  return ActionResult(
+                      success=True,
+                      data={"path": str(path), "type": "file",
+                            "already_existed": True},
+                      method_used="filesystem"
+                  )
+              path.parent.mkdir(parents=True, exist_ok=True)
+              _atomic_write(path, content)
+              return ActionResult(
+                  success=True,
+                  data={"path": str(path), "type": "file",
+                        "size": len(content), "already_existed": False},
+                  method_used="filesystem"
+              )
+      except Exception as e:
             return ActionResult(
-                success = True,
-                data={"path":str(path), "type":"directory"},
-                method_used="filesystem"
+                success=False, error=str(e), method_used="filesystem"
             )
-        else:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            _atomic_write(path, content)
-            return ActionResult(
-                success=True,
-                data={"path":str(path), "type":"file","size":len(content)},
-                method_used="filesystem"
-            )
-    except PermissionError:
-        return ActionResult(
-            success=False, error=f"Permission denied: {path}",
-            error_code="permission_denied", method_used="filesystem"
-        )
-    except Exception as e:
-        return ActionResult(
-            success=False, error=str(e), method_used="filesystem"
-        )
 
 # write_to_file
 
