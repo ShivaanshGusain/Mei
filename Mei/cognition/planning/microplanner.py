@@ -1,3 +1,4 @@
+import json
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 
@@ -6,9 +7,10 @@ from ...core.events import emit, EventType
 from ...core.cancellation import get_cancellation_token
 from ..llm.engine import get_llm_engine
 from .prompt_builder import build_step_prompt
-from .evaluator import verify_step
+from .evaluator import verify_step, sequence_has_verified_evidence, is_verifiable_domain
 from ...action.executor import get_executor
 from ...action.context import ExecutionContext
+from ...core.state import get_state_machine, AgentState
 
 class MicroPlanner:
     def __init__(self):
@@ -29,11 +31,14 @@ class MicroPlanner:
 
     def execute_sequence(self, sequence: IntentSequence, context: ExecutionContext) -> bool:
         step_results = []
-        
+        state = get_state_machine()
+        state.set_state(AgentState.EXECUTING)
+
         while True:
             # ── Cancellation check — before each step ────────────────────────
             if get_cancellation_token().is_cancelled:
                 emit(EventType.PLAN_FAILED, source="MicroPlanner", reason="cancelled")
+                state.set_state(AgentState.IDLE)
                 return False
 
             current_step = sequence.get_next_step()
@@ -42,6 +47,7 @@ class MicroPlanner:
 
             current_step.status = StepExecutionStatus.RUNNING
             success = False
+            last_failed_call: Optional[tuple] = None
 
             while current_step.retry_count <= current_step.max_retries:
                 prompt, tool_names = build_step_prompt(current_step, context)
@@ -57,9 +63,22 @@ class MicroPlanner:
                     current_step.retry_count += 1
                     continue
 
-                result = self._executor.execute_single_action(
-                    tool_call.get("action", ""), tool_call.get("parameters", {}), context
-                )
+                action = tool_call.get("action", "")
+                parameters = tool_call.get("parameters", {})
+                call_signature = (action, json.dumps(self._sanitize_data(parameters), sort_keys=True))
+
+                if call_signature == last_failed_call:
+                    current_step.retry_count += 1
+                    context.set_variable(
+                        "last_step_error",
+                        f"BLOCKED: You already tried {action}({parameters}) and it failed. "
+                        f"Repeating the exact same call will not work — choose a DIFFERENT "
+                        f"action or DIFFERENT parameters."
+                    )
+                    print(f"[MicroPlanner X-RAY] Blocked duplicate call: {call_signature}")
+                    continue
+
+                result = self._executor.execute_single_action(action, parameters, context)
                 is_ok, reason = verify_step(current_step, result, context)
 
                 print(f"[MicroPlanner X-RAY] Result: success={result.success}, error={result.error}, method={result.method_used}")
@@ -78,17 +97,25 @@ class MicroPlanner:
                     if context.current_window:
                         context.set_variable("current_window_title", context.current_window.title)
 
+                    duration_ms = result.data.get("duration_ms", 0) if isinstance(result.data, dict) else 0
+                    sanitized_data = self._sanitize_data(result.data)
                     step_results.append({
                         "action": tool_call.get("action", ""),
                         "parameters": tool_call.get("parameters", {}),
                         "success": True,
-                        "duration_ms": result.data.get("duration_ms", 0) if isinstance(result.data, dict) else 0,
-                        "data": self._sanitize_data(result.data),
+                        "duration_ms": duration_ms,
+                        "data": sanitized_data,
                         "method_used": getattr(result, "method_used", "unknown"),
-                        "step_description": current_step.description,        # 
-                        "step_domain": current_step.domain,                  # 
-                        "step_expected_output": current_step.expected_output, # 
+                        "step_description": current_step.description,        #
+                        "step_domain": current_step.domain,                  #
+                        "step_expected_output": current_step.expected_output, #
                     })
+                    emit(EventType.PLAN_STEP_COMPLETED, source="MicroPlanner",
+                         action=tool_call.get("action", ""),
+                         parameters=tool_call.get("parameters", {}),
+                         method_used=getattr(result, "method_used", "unknown"),
+                         duration_ms=duration_ms,
+                         data=sanitized_data)
                     try:
                         from ...cognition.observation import get_observation_builder
                         obs = get_observation_builder().build(
@@ -103,16 +130,51 @@ class MicroPlanner:
                     break
                 
                 else:
+                    last_failed_call = call_signature
                     current_step.retry_count += 1
                     context.set_variable("last_step_error", result.error or reason)
                     print(f"[MicroPlanner X-RAY] Retry {current_step.retry_count}/{current_step.max_retries}")
 
             if not success:
                 current_step.status = StepExecutionStatus.FAILED
+                emit(EventType.PLAN_STEP_FAILED, source="MicroPlanner",
+                     action=tool_call.get("action", "") if isinstance(tool_call, dict) else "",
+                     parameters=tool_call.get("parameters", {}) if isinstance(tool_call, dict) else {},
+                     error=context.get_variable("last_step_error", "unknown error"))
                 emit(EventType.PLAN_FAILED, source="MicroPlanner")
+
+                # If this sequence was a Tier 2/3 replay of a remembered goal,
+                # the failure must count against it — otherwise a goal that
+                # broke keeps accumulating historical trust it no longer earns.
+                matched_goal_id = context.get_variable("matched_goal_id")
+                if matched_goal_id:
+                    try:
+                        from ...memory.graph.procedural import update_goal_stats
+                        update_goal_stats(
+                            matched_goal_id, success=False,
+                            duration_ms=context.elapsed_time_ms() if hasattr(context, "elapsed_time_ms") else 0,
+                            verified=is_verifiable_domain(current_step.domain),
+                        )
+                    except Exception as e:
+                        print(f"[Memory] Failed to record replay failure stats: {e}")
+
+                try:
+                    from ...action.debug.logger import get_execution_logger
+                    get_execution_logger().log_execution(
+                        raw_command=sequence.raw_command, success=False,
+                        duration_ms=context.elapsed_time_ms() if hasattr(context, "elapsed_time_ms") else 0,
+                        step_results=step_results,
+                        failure_reason=context.get_variable("last_step_error", "unknown error"),
+                    )
+                except Exception as e:
+                    print(f"[ExecutionLogger] Failed to log execution: {e}")
+
+                state.set_state(AgentState.ERROR)
+                state.set_state(AgentState.IDLE)
                 return False
 
         self._commit_to_graph(sequence, step_results, context.elapsed_time_ms() if hasattr(context, "elapsed_time_ms") else 0, context)
+        state.set_state(AgentState.IDLE)
         return True
         
     def heal_from_failure(
@@ -178,11 +240,23 @@ class MicroPlanner:
 
     def _commit_to_graph(self, sequence, step_results, duration_ms, context):
         try:
+            from ...action.debug.logger import get_execution_logger
+            get_execution_logger().log_execution(
+                raw_command=sequence.raw_command, success=True,
+                duration_ms=duration_ms, step_results=step_results,
+            )
+        except Exception as e:
+            print(f"[ExecutionLogger] Failed to log execution: {e}")
+
+        try:
+            verified = sequence_has_verified_evidence(step_results)
+            print(f"[Memory] Sequence has verified evidence: {verified}")
+
             matched_goal_id = context.get_variable("matched_goal_id")
             if matched_goal_id:
                 try:
                     from ...memory.graph.procedural import update_goal_stats
-                    update_goal_stats(matched_goal_id, success=True, duration_ms=duration_ms)
+                    update_goal_stats(matched_goal_id, success=True, duration_ms=duration_ms, verified=verified)
                     print(f"[Memory] Updated existing goal {matched_goal_id}")
                     return
                 except Exception as e:
@@ -208,6 +282,7 @@ class MicroPlanner:
                 success=True,
                 duration_ms=duration_ms,
                 stability_score=stability,
+                verified=verified,
             )
         except ImportError:
             print("[Memory] episodic memory write_episode not found, skipping commit.")

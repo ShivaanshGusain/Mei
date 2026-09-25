@@ -629,6 +629,13 @@ class Config:
     reactstep: ReactStep = field(default_factory=ReactStep)
     observation: Observation = field(default_factory=Observation)
 
+    # Dynamic tool preferences, set implicitly when the user names a specific
+    # choice in a command (e.g. "open Chrome"). Most values are plain strings
+    # (e.g. {"browser_id": "brave-9f1a2b3c"}); `manual_browsers` is a
+    # {name: path} dict for portable/unregistered browser installs. Lets tool
+    # defaults change at runtime without a dedicated config field per tool.
+    preferences: Dict[str, Any] = field(default_factory=dict)
+
     web: WebConfig = field(default_factory=WebConfig)
     
     audio: AudioConfig = field(default_factory=AudioConfig)
@@ -686,12 +693,10 @@ class Config:
                     if hasattr(config.memory, key):
                         setattr(config.memory, key, value)
             
-            # Update safety config
-            if 'safety' in data:
-                for key, value in data['safety'].items():
-                    if hasattr(config.safety, key):
-                        setattr(config.safety, key, value)
-            
+            # Update dynamic preferences
+            if 'preferences' in data and isinstance(data['preferences'], dict):
+                config.preferences = dict(data['preferences'])
+
             config.debug = data.get('debug', False)
             config.log_level = data.get('log_level', 'INFO')
         
@@ -735,10 +740,7 @@ class Config:
                 'database_path': self.memory.database_path,
                 'max_episodic_entries': self.memory.max_episodic_entries,
             },
-            'safety': {
-                'confirm_destructive': self.safety.confirm_destructive,
-                'blocked_apps': self.safety.blocked_apps,
-            },
+            'preferences': dict(self.preferences),
             'debug': self.debug,
             'log_level': self.log_level,
         }

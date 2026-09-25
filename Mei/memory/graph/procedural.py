@@ -22,6 +22,8 @@ def find_matching_goal(raw_command: str, threshold: float) -> Optional[Dict[str,
                     node.action AS action, node.target AS target,
                     node.created_at AS created_at,
                     node.stability_score AS stability_score,
+                    node.verified_total_count AS verified_total_count,
+                    node.verified_reliability AS verified_reliability,
                     (1.0 - distance) AS confidence
             ORDER BY confidence DESC, node.created_at DESC
             LIMIT 1
@@ -72,23 +74,43 @@ def get_procedure(goal_id: str) -> List[Dict[str, Any]]:
         print(f"Error in get_procedure: {e}")
         return []
 
-def update_goal_stats(goal_id: str, success: bool, duration_ms: float) -> None:
-    """Update replay statistics on an existing Goal node."""
+def update_goal_stats(goal_id: str, success: bool, duration_ms: float, verified: bool = False) -> None:
+    """
+    Update replay statistics on an existing Goal node.
+
+    `verified` distinguishes "the steps ran without error" from "a real
+    domain-specific check confirmed the outcome" (see
+    cognition.planning.evaluator.sequence_has_verified_evidence /
+    is_verifiable_domain).
+
+    `verified_reliability` is an EMA over verified attempts only, using the
+    same decay as `stability_score` — deliberately NOT a lifetime
+    success/total ratio. A lifetime ratio's denominator only grows, so a goal
+    that was reliable for months and then starts failing (e.g. the target
+    website changed) would barely move: a handful of new failures can't
+    outvote hundreds of accumulated historical successes. An EMA actually
+    drops when recent attempts fail, which is what Tier 1's gate needs to mean
+    something. `verified_total_count` is kept only as a lifetime "has this
+    ever actually been verified at all" counter, not as a ratio denominator.
+    """
     from datetime import datetime
     conn = get_kuzu_connection()
+    outcome = 1.0 if success else 0.0
+    set_clauses = [
+        "g.last_executed_at = $ts",
+        "g.stability_score = 0.7 * coalesce(g.stability_score, 0.5) + 0.3 * $outcome",
+    ]
     if success:
-        conn.execute(
-            "MATCH (g:Goal {id: $gid}) "
-            "SET g.success_count = coalesce(g.success_count, 0) + 1, "
-            "    g.last_executed_at = $ts, "
-            "    g.stability_score = 0.7 * coalesce(g.stability_score, 0.5) + 0.3 * 1.0",
-            {"gid": goal_id, "ts": datetime.now().isoformat()}
-        )
+        set_clauses.append("g.success_count = coalesce(g.success_count, 0) + 1")
     else:
-        conn.execute(
-            "MATCH (g:Goal {id: $gid}) "
-            "SET g.fail_count = coalesce(g.fail_count, 0) + 1, "
-            "    g.last_executed_at = $ts, "
-            "    g.stability_score = 0.7 * coalesce(g.stability_score, 0.5) + 0.3 * 0.0",
-            {"gid": goal_id, "ts": datetime.now().isoformat()}
-        )
+        set_clauses.append("g.fail_count = coalesce(g.fail_count, 0) + 1")
+    if verified:
+        set_clauses.append("g.verified_total_count = coalesce(g.verified_total_count, 0) + 1")
+        set_clauses.append("g.verified_reliability = 0.7 * coalesce(g.verified_reliability, 0.5) + 0.3 * $outcome")
+        if success:
+            set_clauses.append("g.verified_success_count = coalesce(g.verified_success_count, 0) + 1")
+
+    conn.execute(
+        "MATCH (g:Goal {id: $gid}) SET " + ", ".join(set_clauses),
+        {"gid": goal_id, "ts": datetime.now().isoformat(), "outcome": outcome}
+    )

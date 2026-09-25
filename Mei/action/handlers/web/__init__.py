@@ -4,6 +4,10 @@ from .navigate import (
     web_navigate_validate, web_navigate_execute, web_navigate_verify,
     WEB_NAVIGATE_SCHEMA,
 )
+from .search import (
+    web_search_validate, web_search_execute, web_search_verify,
+    WEB_SEARCH_SCHEMA,
+)
 from .interact import (
     web_click_validate, web_click_execute, WEB_CLICK_SCHEMA,
     web_type_validate, web_type_execute, WEB_TYPE_SCHEMA,
@@ -32,6 +36,18 @@ def register_web_tools(executor) -> None:
         description="Navigate to a URL in the browser",
     )
     
+    executor.register(
+        name="web_search",
+        impl=web_search_execute,
+        domain="web",
+        schema=WEB_SEARCH_SCHEMA,
+        validate_fn=web_search_validate,
+        verify_fn=web_search_verify,
+        requires_browser=True,
+        cost=3,
+        description="Search a website (YouTube, Google, GitHub, etc.) for a query, in the browser",
+    )
+
     executor.register(
         name="web_click",
         impl=web_click_execute,
@@ -87,4 +103,4 @@ def register_web_tools(executor) -> None:
         description="Scroll the web page up or down",
     )
     
-    print("[WebTools] 6 web tools registered")
+    print("[WebTools] 7 web tools registered")

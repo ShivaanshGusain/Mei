@@ -14,6 +14,7 @@ from ..perception.System.windows import WindowManager
 from .config import get_config
 from .task import IntentSequence, StepExecutionStatus, IntentStep
 from .cancellation import get_cancellation_token
+from .state import get_state_machine, AgentState
 
 from ..memory.graph import find_matching_goal, get_procedure
 
@@ -24,22 +25,30 @@ _last_processed: Optional[str] = None
 # ── Gatekeeping thresholds ────────────────────────────────────────────────────
 TIER1_CONFIDENCE: float = 0.95
 TIER1_STABILITY:  float = 0.75
+TIER1_VERIFIED_RATIO: float = 0.75  # of Tier1-eligible replays, how many had real verification evidence
 TIER2_CONFIDENCE: float = 0.80
 TIER2_STABILITY:  float = 0.50
 
 
-def _get_tier(confidence: float, stability: float) -> int:
+def _get_tier(confidence: float, stability: float, verified_total: int, verified_reliability: float) -> int:
     """
     Gatekeeping matrix:
 
     Gate 1 (Intent Match): confidence — how well the command matches stored memory.
     Gate 2 (Volatility):   stability  — how safe it is to replay the sequence blind.
+    Gate 3 (Verified reliability): an EMA (same decay as `stability_score`) over
+        only the attempts where a real domain-specific check confirmed the
+        outcome, not just "no error". Deliberately not a lifetime ratio — a
+        goal that was reliable for months and then starts failing needs this
+        to actually drop, not get outvoted by a large historical numerator.
 
-    Tier 1: confidence ≥ 0.95 AND stability ≥ 0.75  → full bypass, direct execution
+    Tier 1: confidence ≥ 0.95 AND stability ≥ 0.75 AND verified_reliability ≥ 0.75
+            (with at least one verified attempt on record) → full bypass
     Tier 2: confidence ≥ 0.80 OR  stability ≥ 0.50  → skip intent LLM, planner executes
     Tier 3: everything else                          → full decompose (intent + planner)
     """
-    if confidence >= TIER1_CONFIDENCE and stability >= TIER1_STABILITY:
+    if (confidence >= TIER1_CONFIDENCE and stability >= TIER1_STABILITY
+            and verified_total > 0 and verified_reliability >= TIER1_VERIFIED_RATIO):
         return 1
     if confidence >= TIER2_CONFIDENCE or stability >= TIER2_STABILITY:
         return 2
@@ -80,14 +89,20 @@ def _do_process_user_command(text: str, context: ExecutionContext) -> bool:
     extractor = get_intent_extractor()
     planner   = get_microplanner()
     executor  = get_executor()
+    state     = get_state_machine()
+
+    context.mark_command_start()
+    state.set_state(AgentState.THINKING)
 
     if not (getattr(get_config(), "kuzu", None) and get_config().kuzu.enable_graph_memory):
         # Graph memory disabled — always decompose
         sequence = extractor.decompose(text)
         if not sequence or not sequence.steps:
             print(f"[Pipeline] Could not decompose: '{text}'")
+            state.set_state(AgentState.IDLE)
             return False
         print(f"[Pipeline] Starting execution loop for: {text}")
+        state.set_state(AgentState.PLANNING)
         return planner.execute_sequence(sequence, context)
 
     # ── Phase 1: Memory pre-flight ────────────────────────────────────────────
@@ -99,10 +114,13 @@ def _do_process_user_command(text: str, context: ExecutionContext) -> bool:
         actions    = get_procedure(candidate["id"])
         confidence = float(candidate.get("confidence", 0.0))
         stability  = float(candidate.get("stability_score") or 0.5)
-        tier       = _get_tier(confidence, stability)
+        verified_total       = int(candidate.get("verified_total_count") or 0)
+        verified_reliability = float(candidate.get("verified_reliability") or 0.5)
+        tier       = _get_tier(confidence, stability, verified_total, verified_reliability)
 
         print(f"[Pipeline] Memory: confidence={confidence:.4f}, "
-              f"stability={stability:.3f} -> TIER {tier}")
+              f"stability={stability:.3f}, verified_reliability={verified_reliability:.3f} "
+              f"(n={verified_total}) -> TIER {tier}")
 
         if actions:
             # ── TIER 1: Full bypass — direct execution, no LLM calls ─────────
@@ -110,6 +128,7 @@ def _do_process_user_command(text: str, context: ExecutionContext) -> bool:
                 emit(EventType.MEMORY_PLAN_FOUND, source="Pipeline",
                      confidence=confidence, tier=1)
                 print(f"[Pipeline] TIER 1 — executing {len(actions)} stored step(s) directly.")
+                state.set_state(AgentState.EXECUTING)
 
                 intent_steps = _actions_to_intent_steps(actions)
                 succeeded    = []   # list of (tool_name, params, result)
@@ -127,6 +146,7 @@ def _do_process_user_command(text: str, context: ExecutionContext) -> bool:
                     # Cancellation check before each direct execution
                     if get_cancellation_token().is_cancelled:
                         emit(EventType.PLAN_FAILED, source="Pipeline", reason="cancelled")
+                        state.set_state(AgentState.IDLE)
                         return False
 
                     result = executor.execute_single_action(tool_name, params, context)
@@ -142,11 +162,37 @@ def _do_process_user_command(text: str, context: ExecutionContext) -> bool:
                         if context.current_window:
                             context.set_variable("current_window_title",
                                                   context.current_window.title)
+                        emit(EventType.PLAN_STEP_COMPLETED, source="Pipeline",
+                             action=tool_name, parameters=params,
+                             method_used=result.method_used or "direct",
+                             duration_ms=0, data=result.data)
                     else:
                         # Self-heal: hand failed step + remaining to planner
                         print(f"[Pipeline] Tier 1 step {i+1} failed "
                               f"({reason}). Triggering self-heal.")
+                        emit(EventType.PLAN_STEP_FAILED, source="Pipeline",
+                             action=tool_name, parameters=params, error=reason)
+
+                        # A blindly-replayed goal just failed — this MUST count
+                        # against its reliability, or a goal that broke (e.g. the
+                        # target website changed) keeps its Tier 1 trust forever.
+                        try:
+                            from ..memory.graph.procedural import update_goal_stats
+                            from ..cognition.planning.evaluator import is_verifiable_domain
+                            update_goal_stats(
+                                candidate["id"], success=False,
+                                duration_ms=context.elapsed_time_ms(),
+                                verified=is_verifiable_domain(intent_step.domain),
+                            )
+                        except Exception as e:
+                            print(f"[Pipeline] Failed to record Tier 1 failure stats: {e}")
+
                         remaining = intent_steps[i:]  # include the failed step
+                        # Note: no explicit EXECUTING->PLANNING transition here —
+                        # it's not in the allowed_transitions graph (self-healing
+                        # counts as continuing to execute); heal_from_failure()
+                        # hands off into execute_sequence(), which manages its
+                        # own EXECUTING/IDLE/ERROR transitions.
                         return planner.heal_from_failure(
                             succeeded_steps=succeeded,
                             failed_step_index=i,
@@ -185,6 +231,7 @@ def _do_process_user_command(text: str, context: ExecutionContext) -> bool:
                     0,
                     context,
                 )
+                state.set_state(AgentState.IDLE)
                 return True
 
             # ── TIER 2: Skip intent LLM, planner regenerates tool calls ──────
@@ -202,6 +249,7 @@ def _do_process_user_command(text: str, context: ExecutionContext) -> bool:
                     confidence=confidence,
                 )
                 print(f"[Pipeline] Starting execution loop for: {text}")
+                state.set_state(AgentState.PLANNING)
                 return planner.execute_sequence(sequence, context)
 
             # ── TIER 3 from memory: verify_macro then planner ─────────────────
@@ -212,6 +260,7 @@ def _do_process_user_command(text: str, context: ExecutionContext) -> bool:
                 sequence = extractor.verify_macro(text, candidate, actions)
                 if sequence:
                     print(f"[Pipeline] Starting execution loop for: {text}")
+                    state.set_state(AgentState.PLANNING)
                     return planner.execute_sequence(sequence, context)
                 # verify_macro rejected — fall through to decompose
                 print(f"[Pipeline] verify_macro rejected macro, decomposing fresh.")
@@ -222,9 +271,11 @@ def _do_process_user_command(text: str, context: ExecutionContext) -> bool:
 
     if not sequence or not sequence.steps:
         print(f"[Pipeline] Could not decompose: '{text}'")
+        state.set_state(AgentState.IDLE)
         return False
 
     print(f"[Pipeline] Starting execution loop for: {text}")
+    state.set_state(AgentState.PLANNING)
     return planner.execute_sequence(sequence, context)
 
 

@@ -23,6 +23,7 @@ TOOL_REGISTRY = {
     "click":                    "Click a UI element by name or at screen coordinates",
     "scroll":                   "Scroll the mouse wheel up or down",
     "web_navigate":             "Navigate to a URL in the browser via Playwright CDP",
+    "web_search":               "Search a website (e.g. YouTube, Google, GitHub) for a query, in the browser",
     "web_click":                "Click a web page element by text, role, CSS selector",
     "web_type":                 "Type text into a web page input field via Playwright",
     "web_get_state":            "Get current web page content, links, or inputs",
@@ -34,7 +35,7 @@ TOOL_REGISTRY = {
     "kill_process":             "Terminate a managed background process by PID",
     "list_files":               "List files and folders in a directory",
     "read_file":                "Read file contents by line range with line numbers",
-    "search_files":             "Search for text or regex pattern in files under a directory",
+    "search_files":             "Search for text or regex in LOCAL DISK files under a directory. NOT for websites — use web_search for that.",
     "create_file_or_folder":    "Create a new file or directory at a given path. PREFER over launching a text editor.",
     "write_to_file":            "Write or append content to a file",
     "edit_file_by_lines":       "Replace a range of lines in a file",
@@ -111,6 +112,12 @@ TOOL_DETAIL = {
         'web_navigate(url: str, new_tab?: bool)\n'
         '  Navigate to a URL in the browser via Playwright. Requires CDP on port 9222.'
     ),
+    "web_search": (
+        'web_search(query: str, site?: str)\n'
+        '  Search a website for a query in the browser (default site: google). '
+        'Known sites: youtube, google, bing, duckduckgo, amazon, wikipedia, github. '
+        'Use this instead of search_files for anything web-related.'
+    ),
     "web_click": (
         'web_click(selector: str, selector_type?: "text"|"role"|"placeholder"|"label"|"css"|"xpath"|"testid")\n'
         '  Click a web page element.'
@@ -157,7 +164,7 @@ TOOL_DETAIL = {
     ),
     "search_files": (
         'search_files(directory: str, pattern: str, file_glob?: str, is_regex?: bool)\n'
-        '  Search for text or regex in files under a directory.'
+        '  Search for text or regex in LOCAL DISK files under a directory. NOT for websites — use web_search instead.'
     ),
     "create_file_or_folder": (
         'create_file_or_folder(path: str, is_dir?: bool, content?: str)\n'

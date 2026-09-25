@@ -18,6 +18,7 @@ class EventType(Enum):
     # Lifecycle
     AGENT_STARTED = auto()
     AGENT_STOPPED = auto()
+    AGENT_STATE_CHANGED = auto()
     
     # Audio
     WAKE_WORD_DETECTED = auto()

@@ -1,0 +1,34 @@
+audio:
+  channels: 1
+  chunk: 1024
+  compute_type: int8
+  device: cuda
+  energy_threshold: 0.003
+  language: en
+  model_path: models/whisper-model
+  sample_rate: 16000
+  wake_word: mei
+debug: false
+knownapps:
+  app_dir_file: known_apps.csv
+llm:
+  context_length: 2500
+  gpu_layers: -1
+  intent_gpu_layers: -1
+  intent_model_path: C:\Users\Asus\Projects\Mei\models\Phi-3.5-mini-instruct.Q5_K_M.gguf
+  max_tokens: 512
+  model_path: C:\Users\Asus\Projects\Mei\models\qwen2.5-3b-instruct-q4_k_m.gguf
+  planner_gpu_layers: -1
+  planner_model_path: C:\Users\Asus\Projects\Mei\models\xLAM-2-1B-fc-r-Q4_0.gguf
+  temperature: 0.1
+  threads: 16
+log_level: INFO
+memory:
+  database_path: data/kuzu_memory
+  max_episodic_entries: 10000
+preferences:
+  browser_id: brave-f592724f
+system:
+  multi_monitor: true
+  prefer_accessibility_api: true
+  virtual_desktops: true

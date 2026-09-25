@@ -11,6 +11,9 @@ KUZU_SCHEMA = [
     stability_score     DOUBLE,
     success_count       INT64 DEFAULT 0,
     fail_count          INT64 DEFAULT 0,
+    verified_success_count INT64 DEFAULT 0,
+    verified_total_count   INT64 DEFAULT 0,
+    verified_reliability   DOUBLE DEFAULT 0.5,
     last_executed_at    STRING,
     PRIMARY KEY (id))
     """,
@@ -123,14 +126,50 @@ def apply_schema(conn):
     """Executes the KUZU_SCHEMA and prints names of newly created tables."""
     for query in KUZU_SCHEMA:
         tables_before = {row["name"] for row in conn.execute("CALL show_tables() RETURN *")}
-        
+
         conn.execute(query)
-        
+
         tables_after = {row["name"] for row in conn.execute("CALL show_tables() RETURN *")}
         new_tables = tables_after - tables_before
-        
+
         for table in new_tables:
             print(f"Created table: {table}")
+
+    _migrate_goal_columns(conn)
+
+
+def _existing_goal_columns(conn) -> set:
+    """Introspect Goal's current columns so migration can be a clean skip
+    rather than a blind try/except swallow. Falls back to an empty set (which
+    just means every ALTER below gets attempted, each still individually
+    guarded) if this Kuzu version's introspection call differs."""
+    try:
+        rows = conn.execute("CALL TABLE_INFO('Goal') RETURN *")
+        return {row.get("name") for row in rows if row.get("name")}
+    except Exception:
+        return set()
+
+
+def _migrate_goal_columns(conn):
+    """Best-effort migration for databases created before goal-level
+    verification tracking existed. CREATE TABLE IF NOT EXISTS above won't add
+    columns to an already-existing Goal table, so add them explicitly here."""
+    existing = _existing_goal_columns(conn)
+    for column, col_type, default in (
+        ("verified_success_count", "INT64", "0"),
+        ("verified_total_count", "INT64", "0"),
+        ("verified_reliability", "DOUBLE", "0.5"),
+    ):
+        if column in existing:
+            continue
+        try:
+            conn.execute(f"ALTER TABLE Goal ADD {column} {col_type} DEFAULT {default}")
+            print(f"Migrated Goal table: added {column}")
+        except Exception as e:
+            print(f"[Schema] Could not add column '{column}' "
+                  f"(may already exist, or this Kuzu version's ALTER syntax differs): {e}")
+
+
 def create_vector_index(conn):
     """Creates the HNSW index on the Goal embedding safely (idempotent)."""
     try:

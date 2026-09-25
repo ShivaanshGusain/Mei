@@ -212,27 +212,7 @@ class PlanExecutor:
         
         # If no external context was provided, create a minimal one
         if context is None:
-            dummy_intent = Intent(
-                action=action,
-                target=None,
-                parameters=parameters,
-                confidence=0.1,
-                raw_command=f"direct:{action}"
-            )
-            dummy_step = Step(
-                id=f"direct_{action}",
-                action=action,
-                parameters=parameters,
-                description=f"Direct execution of {action}"
-            )
-
-            dummy_plan = Plan(
-                steps=[dummy_step],
-                strategy="direct_execution",
-                reasoning="Direct action execution"
-            )
-
-            context = ExecutionContext(plan = dummy_plan, intent= dummy_intent)
+            context = ExecutionContext.empty()
 
         try:
             # return handler.execute(parameters,context)

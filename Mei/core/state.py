@@ -77,11 +77,17 @@ class StateMachine:
             self.current_state = new_state
             self.last_transition = datetime.now()
             
-            # Announce the change to the rest of the system
+            # Announce the change to the rest of the system.
+            # NOTE: this used to (mis)reuse AGENT_STARTED/WINDOW_CHANGED for this,
+            # which meant every transition to IDLE silently fired AGENT_STARTED —
+            # and WorkingMemory's AGENT_STARTED handler does a full session reset
+            # (wipes conversation/task history). That would have fired after
+            # every single command once this state machine was actually wired
+            # up. Use a dedicated event instead.
             print(f"[State] {old_state.name} -> {new_state.name}")
-            emit(EventType.AGENT_STARTED if new_state == AgentState.IDLE else EventType.WINDOW_CHANGED, 
-                 source="state_machine", 
-                 old_state=old_state.name, 
+            emit(EventType.AGENT_STATE_CHANGED,
+                 source="state_machine",
+                 old_state=old_state.name,
                  new_state=new_state.name)
             
             return True

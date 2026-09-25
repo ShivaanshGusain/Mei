@@ -13,6 +13,7 @@ def write_episode(
     success: bool,
     duration_ms: float,
     stability_score: float = 0.5,
+    verified: bool = False,
 ) -> None:
     try:
         conn = get_kuzu_connection()
@@ -39,7 +40,9 @@ def write_episode(
             session_id: $session_id,
             created_at: $now,
             embedding: $embedding,
-            stability_score: $stability_score
+            stability_score: $stability_score,
+            verified_total_count: 1,
+            verified_success_count: $verified_success_count
         })
         """
         conn.execute(goal_query, {
@@ -51,6 +54,7 @@ def write_episode(
             'now': now,
             'embedding': embedding,
             'stability_score': float(stability_score),
+            'verified_success_count': 1 if verified else 0,
         })
         
         # 2. Create edge Goal -[PART_OF_SESSION]-> Session

@@ -31,7 +31,6 @@ if "flash_attn" not in sys.modules:
 
 import threading
 import time
-import tempfile
 
 import torch
 from PIL import Image
@@ -90,6 +89,14 @@ class VisualAnalyzer:
             if self._models_loaded:
                 return True
             try:
+                # Share the LLM engines' one-model-at-a-time VRAM policy so
+                # YOLO+Florence2 don't sit in VRAM uncoordinated alongside
+                # whatever LLM is currently loaded (see register_gpu_resident).
+                if self._device == "cuda":
+                    from ...cognition.llm.engine import _ensure_gpu_exclusive, register_gpu_resident
+                    register_gpu_resident("visual", self)
+                    _ensure_gpu_exclusive("visual")
+
                 emit(event_type=EventType.VISUAL_ANALYSIS_STARTED, source="VisualAnalyzer", operation= "loading_models")
                 print("Loading Yolo Model")
                 self._yolo_model = get_yolo_model(self._icon_detect_path)
@@ -161,16 +168,15 @@ class VisualAnalyzer:
         if not self._load_models():
             return [],"", None
 
-        temp_file= tempfile.NamedTemporaryFile(suffix='.png',delete=False)
-        temp_path = temp_file.name
-        temp_file.close()
-        if image.mode!='RGB':
+        # check_ocr_box/get_som_labeled_img both accept a PIL Image directly
+        # (they only convert from a path if given a str) — no need to round-trip
+        # every screenshot through a temp .png file on disk.
+        if image.mode != 'RGB':
             image = image.convert("RGB")
-        image.save(temp_path)
 
         try:
             (ocr_text_list, ocr_bbox_list),_ = check_ocr_box(
-                temp_path,
+                image,
                 display_img=False,
                 output_bb_format='xyxy',
                 easyocr_args={'text_threshold':0.8},
@@ -189,24 +195,20 @@ class VisualAnalyzer:
             'thickness': max(int(3*box_overlay_ratio),1)
         }
 
-        try:
-            annotated_img, label_coords, parsed_content_list = get_som_labeled_img(
-                image_source=temp_path,
-                model=self._yolo_model,
-                BOX_TRESHOLD=self.config.box_threshold,
-                output_coord_in_ratio=True,
-                ocr_bbox=ocr_bbox_list,
-                draw_bbox_config=draw_bbox_config,
-                caption_model_processor=self._caption_model_processor,
-                ocr_text=ocr_text_list,
-                use_local_semantics=self.config.use_local_semantics,
-                scale_img=False,
-                batch_size=128
-            )
-        finally:
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
-            
+        annotated_img, label_coords, parsed_content_list = get_som_labeled_img(
+            image_source=image,
+            model=self._yolo_model,
+            BOX_TRESHOLD=self.config.box_threshold,
+            output_coord_in_ratio=True,
+            ocr_bbox=ocr_bbox_list,
+            draw_bbox_config=draw_bbox_config,
+            caption_model_processor=self._caption_model_processor,
+            ocr_text=ocr_text_list,
+            use_local_semantics=self.config.use_local_semantics,
+            scale_img=False,
+            batch_size=128
+        )
+
         elements, text_content = self._parse_detection_results(
             parsed_content_list=parsed_content_list,
             image_size = image.size,
@@ -305,14 +307,9 @@ class VisualAnalyzer:
             return 0.6
     
     def _extract_text_only(self, image:Image.Image)->str:
-        temp_file = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
-        temp_path = temp_file.name
-        temp_file.close()
-        image.save(temp_path)
-
         try:
             (ocr_text_list, ocr_bbox_list), _ = check_ocr_box(
-                temp_path,
+                image,
                 display_img=False,
                 output_bb_format='xyxy',
                 easyocr_args={'text_threshold':0.5},
@@ -324,9 +321,6 @@ class VisualAnalyzer:
         except Exception as e:
             emit(EventType.ERROR,source="VisualAnalyzer",error=str(e),operation = 'extract_text_only')
             return ""
-        finally:
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
         
     def find_element(self,screenshot:Screenshot, query: str, element_type:Optional[str]= None)->Optional[VisualElement]:
         result = self.analyze(screenshot)

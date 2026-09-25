@@ -4,8 +4,7 @@ from datetime import datetime
 from typing import Dict, Any, Optional, List
 from pathlib import Path
 
-from ...core.config import get_config, ActionResult
-from ..context import ExecutionContext
+from ...core.config import get_config
 
 
 DEFAULT_LOG_DIR = 'data/execution_logs'
@@ -100,78 +99,54 @@ class ExecutionLogger:
             print("Error rotating log: {e}")
             return 
     
-    def log_execution(self, context:ExecutionContext, success:bool, failure_reason: Optional[str] = None)-> str:
+    def log_execution(self, raw_command: str, success: bool, duration_ms: float,
+                       step_results: List[Dict[str, Any]],
+                       failure_reason: Optional[str] = None) -> str:
+        """
+        Records one full command execution as structured JSON, independent of
+        Kùzu — useful for get_statistics()/get_failure_analysis() without a DB
+        query, and as a plain-text-searchable execution history.
+
+        `step_results` uses the same shape microplanner._commit_to_graph()
+        already builds: [{"action", "parameters", "success", "method_used",
+        "step_domain", ...}, ...] — NOT the old Intent/Plan/Step object shape
+        this method used to (and would have crashed on: ExecutionContext no
+        longer populates context.intent/context.plan).
+        """
         execution_id = self._generate_execution_id()
         record = {
-            'id': self._session_id,
+            'id': execution_id,
+            'session_id': self._session_id,
             'timestamp': datetime.now().isoformat(),
             'success': success,
-            'failure_reason':failure_reason,
-            'duration_ms': context.elapsed_time_ms(),
-            'intent':{
-                'action':context.intent.action,
-                'target': context.intent.target,
-                'parameters': context.intent.parameters,
-                'raw_command': context.intent.raw_command,
-                'confidence':context.intent.confidence
-            },
-            'plan':{
-                'strategy': context.plan.strategy,
-                'reasoning': context.plan.reasoning,
-                'step_count': len(context.plan.steps),
-                'steps':[
-                    {
-                        'index': i,
-                        'action': step.action,
-                        'parameters':step.parameters,
-                        'description': step.description,
-                        'status': step.status.name if step.status else "UNKNOWN"
-                    }
-                    for i, step in enumerate(context.plan.steps)
-                ]
-            },
-            'step_results': [ 
+            'failure_reason': failure_reason,
+            'duration_ms': duration_ms,
+            'raw_command': raw_command,
+            'step_count': len(step_results),
+            'steps': [
                 {
-                    'step_index':  i,
-                    'success': result.success,
-                    'method_used': result.method_used,
-                    'error': result.error,
-                    'data_key': list(result.data.keys()) if result.data else []
+                    'index': i,
+                    'action': s.get('action'),
+                    'parameters': s.get('parameters'),
+                    'success': s.get('success'),
+                    'method_used': s.get('method_used'),
+                    'step_domain': s.get('step_domain'),
                 }
-                for i, result in enumerate(context.step_results)
+                for i, s in enumerate(step_results)
             ],
-            'final_context': {
-                'current_window': {
-                    'hwnd': context.current_window.hwnd,
-                    'title': context.current_window.title,
-                    'process': context.current_window.process_name
-                } if context.current_window else None,
-                'variables': context.variables,
-                'cached_element': list(context._found_elements.keys())
-            }
         }
         self._log_data['executions'].append(record)
         if success:
-            self._log_data['metadata']['total_successes'] = self._log_data['metadata'].get('total_successes', 0) +1
+            self._log_data['metadata']['total_success'] = self._log_data['metadata'].get('total_success', 0) + 1
         else:
-            self._log_data['metadata']['total_failures'] = self._log_data['metadata'].get("total_failures", 0 ) + 1
+            self._log_data['metadata']['total_failures'] = self._log_data['metadata'].get("total_failures", 0) + 1
 
         self._rotate_if_needed()
         self._save_log()
         status = "Success" if success else "Failed"
-        print(f" {status} execution id: {execution_id}, {context.intent.raw_command[:40]}, {context.elapsed_time_ms():.0f}ms")
+        print(f"[ExecutionLogger] {status} {execution_id}: {raw_command[:40]!r} ({duration_ms:.0f}ms)")
 
         return execution_id
-    
-    def log_step(self, context: ExecutionContext, step_index: int, result: ActionResult) -> None:
-        step = context.plan.steps[step_index] if step_index < len(context.plan.steps) else None
-        if not step:
-            return 
-
-        status = "Success" if result.success else "Fail"
-        print(f"Step { step_index + 1} / { len(context.plan.steps)} { status} { step.action}, {   result.method_used}")
-        if result.error:
-            print(f"Error: {result.error}")
 
     def get_recent_executiosn(self, count: int = 10) -> List[Dict[str, Any]]:
         executions = self._log_data.get('executions',[])

@@ -58,18 +58,6 @@ def _resolve_app_name(raw_name: str, process_manager) -> str:
 
     return raw_lower
 
-def _is_cdp_available(port: int = 9222) -> bool:
-    """Checks if a browser is actively listening on the CDP debugging port."""
-    import socket
-    try:
-        # Fast socket check strictly on IPv4
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.settimeout(1.0)
-            result = s.connect_ex(('127.0.0.1', port))
-            return result == 0
-    except Exception:
-        return False
-        
 def _launch_app_wait_for_window(pid: int, app_name: str)-> Optional['WindowInfo']:
 
     window_manager = get_window_manager()
@@ -103,52 +91,63 @@ def launch_app_execute(params: Dict[str,Any], context: ExecutionContext)-> Actio
         app_name = _resolve_app_name(app_name, process_manager)
         is_browser = get_app_library().guess_category(app_name) == "browser"
         print(f"[AppHandler] app_name='{app_name}', is_browser={is_browser}")
-        
-        if is_browser and _is_cdp_available(9222):
-            print(f"[AppHandler] CDP path: browser detected on port 9222")
-            # Find the existing browser window and attach it to context
-            window_manager = get_window_manager()
-            browser_window = None
 
-            # Try to match the exact tab that CDP/Playwright is on
-            try:
-                
-                from .web.session import get_browser_manager
-                manager = get_browser_manager()
-                if manager.connect():
+        browser_record = None
+        if is_browser:
+            from .web.session import get_browser_manager, resolve_browser
+            manager = get_browser_manager()
+
+            if manager.connect(app_name):
+                record = manager.active_browser
+                app_name = record.exe_name.replace(".exe", "")
+                print(f"[AppHandler] CDP path: connected to '{record.display_name}'")
+
+                # Find the existing browser window and attach it to context
+                window_manager = get_window_manager()
+                browser_window = None
+                try:
                     active_page = manager.get_active_page()
                     if active_page:
                         cdp_title = active_page.title()
                         if cdp_title:
                             browser_window = window_manager.find_window(cdp_title)
-            except Exception:
-                pass
+                except Exception:
+                    pass
 
-            # Fallback to process name match
-            if not browser_window:
-                browser_window = window_manager.find_window(app_name)
+                if not browser_window:
+                    browser_window = window_manager.find_window(app_name)
 
-            if browser_window:
-                window_manager.focus_window(browser_window.hwnd)
-                context.set_current_window(browser_window)
-                print(f"[AppHandler] CDP: attached window '{browser_window.title}' (hwnd={browser_window.hwnd})")
-            else:
-                print(f"[AppHandler] CDP: WARNING - no window found for '{app_name}'")
-                
-            context.set_variable("browser_cdp_active", True)
-            context.set_variable("launched_app", app_name)
-            return ActionResult(
-                success=True,
-                data={
-                    "app_name": app_name,
-                    "already_running": True,
-                    "cdp_active": True,
-                    "hwnd": browser_window.hwnd if browser_window else None,
-                    "title": browser_window.title if browser_window else None,
-                    "pid": browser_window.pid if browser_window else None
-                },
-                method_used="cdp_session"
-            )
+                if browser_window:
+                    window_manager.focus_window(browser_window.hwnd)
+                    context.set_current_window(browser_window)
+                    print(f"[AppHandler] CDP: attached window '{browser_window.title}' (hwnd={browser_window.hwnd})")
+                else:
+                    print(f"[AppHandler] CDP: WARNING - no window found for '{app_name}'")
+
+                context.set_variable("browser_cdp_active", True)
+                context.set_variable("launched_app", app_name)
+                return ActionResult(
+                    success=True,
+                    data={
+                        "app_name": app_name,
+                        "already_running": True,
+                        "cdp_active": True,
+                        "hwnd": browser_window.hwnd if browser_window else None,
+                        "title": browser_window.title if browser_window else None,
+                        "pid": browser_window.pid if browser_window else None
+                    },
+                    method_used="cdp_session"
+                )
+
+            # CDP session unavailable (browser not resolvable, or not CDP-capable,
+            # or the CDP launch itself failed) — fall through to a plain process
+            # launch. Prefer whichever browser the resolver did manage to identify
+            # so we launch the right one rather than reinterpreting the raw name.
+            browser_record, _ = resolve_browser(app_name)
+            if browser_record:
+                app_name = browser_record.exe_name.replace(".exe", "")
+            print(f"[AppHandler] CDP path unavailable for '{app_name}' — falling back to plain process launch")
+
         wait_for_window = params.get('wait_for_window', True)
         focus_if_running = params.get('focus_if_running', True)
         
@@ -181,6 +180,21 @@ def launch_app_execute(params: Dict[str,Any], context: ExecutionContext)-> Actio
                         method_used="process_manager"
                     )
         pid = process_manager.launch(app_name)
+        if pid is None and browser_record is not None:
+            # process_manager only knows apps listed in known_apps.csv — the
+            # catalog already verified this browser's real path, so launch it
+            # directly rather than failing just because it isn't in that list.
+            try:
+                import subprocess
+                existing = {p.pid for p in process_manager.find_all_processes(app_name)}
+                subprocess.Popen([browser_record.exe_path], shell=False, start_new_session=True)
+                time.sleep(1)
+                for proc in process_manager.find_all_processes(app_name):
+                    if proc.pid not in existing:
+                        pid = proc.pid
+                        break
+            except Exception as e:
+                print(f"[AppHandler] Direct browser launch failed: {e}")
         print(f"[AppHandler] Launched pid={pid}")
         if pid is None:
             return ActionResult(

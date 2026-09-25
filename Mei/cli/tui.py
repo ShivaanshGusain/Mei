@@ -156,6 +156,14 @@ class MeiTUI(App):
         capture = TUIPrintCapture(self)
         sys.stdout = capture
         sys.stderr = capture
+
+        # Tee everything the trace pane shows (plus uncaught exceptions in any
+        # thread) into logs/run_<timestamp>.log too — must come AFTER the
+        # capture reassignment above, so it wraps TUIPrintCapture rather than
+        # being overwritten by it.
+        from ..core.run_logger import install_run_logging
+        install_run_logging()
+
         self._logging_handler = TUILoggingHandler(self)
         self._logging_handler.setFormatter(logging.Formatter("[%(name)s] %(message)s"))
         logging.root.addHandler(self._logging_handler)
@@ -252,6 +260,8 @@ class MeiTUI(App):
             if isinstance(cmd, tuple) and cmd[0] == "__teach_save__":
                 _, name, steps = cmd
                 try:
+                    from ..memory.graph.stability import score_episode
+                    stability_score = score_episode(steps)
                     write_episode(
                         execution_id=f"teach_{int(_time.time() * 1000)}",
                         session_id=get_working_memory()._session_id or "teach",
@@ -276,7 +286,7 @@ class MeiTUI(App):
                         ],
                         success=True,
                         duration_ms=0,
-                        stability_score=0.85,
+                        stability_score=stability_score,
                     )
                     emit(
                         EventType.MEMORY_STORED,
@@ -365,11 +375,7 @@ class MeiTUI(App):
                 name  = self._teaching_name
                 steps = list(self._teaching_steps)
                 self._stop_teaching()
-                self._cmd_queue.put(("__teach_save__", name, steps))
-                trace.write(
-                    f"[green]Saving [bold]{name!r}[/bold] "
-                    f"with {len(steps)} step(s)...[/green]"
-                )
+                self._confirm_teach_save(name, steps)
 
         elif verb == "/query":
             if not arg:
@@ -437,6 +443,56 @@ class MeiTUI(App):
                 EventType.PLAN_STEP_COMPLETED, self._teaching_subscriber
             )
             self._teaching_subscriber = None
+        self._teaching_name  = None
+        self._teaching_steps = []
+
+    def _confirm_teach_save(self, name: str, steps: list) -> None:
+        """Show the captured steps before committing them to memory — a
+        recorded episode should not silently become a trusted, replayable
+        procedure without the user seeing what was actually captured."""
+        from textual.screen import ModalScreen
+        from textual.widgets import Button, Label, Static
+        from rich.markup import escape
+
+        lines = [f"{i+1}. {s.get('action')}({s.get('parameters', {})})" for i, s in enumerate(steps)]
+        preview = "\n".join(escape(line) for line in lines[:12])
+        if len(lines) > 12:
+            preview += f"\n... and {len(lines) - 12} more"
+
+        class TeachConfirm(ModalScreen):
+            CSS = """
+            TeachConfirm { align: center middle; }
+            #dialog {
+                background: $surface;
+                border: thick $accent;
+                padding: 2 4;
+                width: 72;
+                height: auto;
+            }
+            #q { margin-bottom: 1; }
+            #steps { margin-bottom: 1; color: $text-muted; }
+            """
+
+            def compose(self) -> ComposeResult:
+                with Vertical(id="dialog"):
+                    yield Label(f"Save workflow [bold]{escape(name)!r}[/bold] "
+                                f"with {len(steps)} step(s)?", id="q")
+                    yield Static(preview or "(no steps)", id="steps")
+                    yield Button("Save", variant="success", id="yes")
+                    yield Button("Discard", variant="error", id="no")
+
+            def on_button_pressed(self, event: Button.Pressed) -> None:
+                self.dismiss(event.button.id == "yes")
+
+        def _after(confirmed: bool) -> None:
+            trace = self.query_one(TracePane)
+            if confirmed:
+                self._cmd_queue.put(("__teach_save__", name, steps))
+                trace.write(f"[green]Saving [bold]{name!r}[/bold] with {len(steps)} step(s)...[/green]")
+            else:
+                trace.write(f"[yellow]Discarded recording [bold]{name!r}[/bold].[/yellow]")
+
+        self.push_screen(TeachConfirm(), _after)
         self._teaching_name  = None
         self._teaching_steps = []
 

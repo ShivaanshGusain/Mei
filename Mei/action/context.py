@@ -24,6 +24,21 @@ class ExecutionContext:
     def empty(cls) -> "ExecutionContext":
         return cls(plan=None, intent=None)
 
+    def mark_command_start(self) -> None:
+        """
+        Resets the elapsed-time clock for a new top-level command.
+
+        The TUI/headless entry points create ONE ExecutionContext and reuse it
+        for the entire session (so current_window/variables/cached elements
+        persist across commands, which is intentional) — but that also meant
+        elapsed_time_ms() measured time since the context was first created,
+        i.e. since the FIRST command of the whole session, not since the
+        current one. Every duration_ms logged anywhere (Goal stats,
+        ExecutionLogger, PLAN_COMPLETED events) was consequently wrong and
+        grew across the session. Call this once per incoming command.
+        """
+        self.start_time = datetime.now()
+
     @property
     def current_window(self) -> Optional[WindowInfo]:
         # If returns None, the handler should use get_foreground_window() or return an error

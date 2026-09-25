@@ -1,6 +1,29 @@
+from typing import List, Dict, Any
+
 from ...core.task import IntentStep
 from ...core.config import ActionResult
 from ...action.context import ExecutionContext
+
+# Domains verify_step() actually has a real, domain-specific check for.
+# "utility"/"input"/"unknown" steps (e.g. wait, hotkey) fall through to the
+# trivial "nothing to check, assume ok" case below and are not, by themselves,
+# evidence that the user's goal was achieved.
+_VERIFIABLE_DOMAINS = {"app", "window", "web", "file"}
+
+
+def sequence_has_verified_evidence(step_results: List[Dict[str, Any]]) -> bool:
+    """
+    Goal-level signal: True only if at least one step in the sequence went
+    through a real domain-specific check, not just "no error occurred".
+    A sequence made entirely of trivial steps (e.g. just `wait`) succeeding
+    is not, on its own, proof the requested outcome actually happened.
+    """
+    return any(sr.get("step_domain") in _VERIFIABLE_DOMAINS for sr in step_results)
+
+
+def is_verifiable_domain(domain: str) -> bool:
+    """Whether verify_step() has a real, domain-specific check for `domain`."""
+    return domain in _VERIFIABLE_DOMAINS
 
 def verify_step(step: IntentStep, result: ActionResult, context: ExecutionContext) -> tuple[bool, str]:
     """

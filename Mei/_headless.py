@@ -20,6 +20,9 @@ from .memory.working import get_working_memory
 
 
 def run_headless() -> None:
+    from .core.run_logger import install_run_logging
+    install_run_logging()
+
     print("Starting Mei (headless mode)...")
 
     init_config()

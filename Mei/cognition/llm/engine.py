@@ -275,8 +275,23 @@ class LLMEngine:
 # _engine_instance:Optional[LLMEngine] = None
 
 _engines: Dict[str, LLMEngine] = {}
+_gpu_residents: Dict[str, Any] = {}   # non-LLMEngine GPU consumers, e.g. VisualAnalyzer
 _swap_lock = threading.Lock()
 _active_gpu_engine: Optional[str] = None   # name of the engine currently loaded on GPU
+
+
+def register_gpu_resident(name: str, resident: Any) -> None:
+    """
+    Let a non-LLMEngine GPU consumer (VisualAnalyzer's YOLO+Florence2) share
+    the same one-model-at-a-time VRAM policy as the LLM engines. `resident`
+    just needs `.is_loaded()` and `.unload()` methods.
+
+    Without this, the visual fallback's models stayed GPU-resident forever
+    once loaded — nothing ever evicted them, so they permanently ate into the
+    same 4GB budget the LLM engines swap in and out of, causing fragmentation
+    and OOM hangs on smaller GPUs.
+    """
+    _gpu_residents[name] = resident
 
 
 def _ensure_gpu_exclusive(requester_name: str) -> None:
@@ -291,7 +306,7 @@ def _ensure_gpu_exclusive(requester_name: str) -> None:
 
     with _swap_lock:
         if _active_gpu_engine and _active_gpu_engine != requester_name:
-            other = _engines.get(_active_gpu_engine)
+            other = _engines.get(_active_gpu_engine) or _gpu_residents.get(_active_gpu_engine)
             if other and other.is_loaded():
                 print(f"[LLMEngine] Swapping out '{_active_gpu_engine}' "
                       f"to make room for '{requester_name}'")

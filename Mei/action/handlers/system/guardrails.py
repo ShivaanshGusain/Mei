@@ -22,8 +22,15 @@ def validate_path_safe(path_str: str,
     For writes: checks against the project-root allowlist.
     For reads: only checks existence (no write-root restriction).
     """
-    if not path_str or not path_str.strip():
+    path_str = path_str.strip()
+    if not path_str:
         return (False, "Path cannot be empty", None)
+    
+    # Auto-expand ~, and common user folders if passed as relative
+    if path_str.lower().startswith(('desktop', 'documents', 'downloads', 'music', 'pictures', 'videos')):
+        path_str = os.path.join(os.path.expanduser('~'), path_str)
+    elif path_str.startswith('~/') or path_str.startswith('~\\'):
+        path_str = os.path.expanduser(path_str)
     
     try:
         path = Path(path_str).resolve()
