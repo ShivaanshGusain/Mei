@@ -16,7 +16,7 @@ from llama_cpp import Llama
 
 from ...core.config import get_config
 from ...core.events import emit, subscribe, EventType
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Union
 
 import threading
 import json
@@ -133,7 +133,7 @@ class LLMEngine:
             print(f"[{self._name}] chat() failed: {e}")
             return ""
     
-    def chat_json(self, messages: List[Dict[str, str]], system_prompt: str = None, max_retries: int = 2)->Optional[Dict]:
+    def chat_json(self, messages: List[Dict[str, str]], system_prompt: str = None, max_retries: int = 2)->Optional[Union[Dict, List]]:
         json_system = system_prompt if system_prompt else ""
         if "json" not in json_system.lower():
             json_system += "\n\n Respond with valid JSON only. No other text."
@@ -222,18 +222,22 @@ class LLMEngine:
             return self.chat_json(messages=messages, system_prompt=system_prompt, max_retries=1)
 
     def _extract_json(self,text:str)->Optional[str]:
-        start = text.find('{')
-        if start == -1:
-            return None
-        
-        depth = 0
-        for i, char in enumerate(text[start:], start):
-            if char == "{":
-                depth +=1
-            elif char == "}":
-                depth -=1
-                if depth == 0:
-                    return text[start:i+1]
+        """Return the first complete JSON value (object OR array) embedded in text.
+
+        Models often wrap JSON in ```json fences or add commentary after it.
+        The old brace-counter only looked for '{', so an array response was cut
+        down to its first element (silently dropping every later step), and a
+        brace inside a string broke the count. raw_decode parses exactly one
+        value and ignores whatever follows it.
+        """
+        decoder = json.JSONDecoder()
+        for i, char in enumerate(text):
+            if char in "[{":
+                try:
+                    _, end = decoder.raw_decode(text, i)
+                    return text[i:end]
+                except json.JSONDecodeError:
+                    continue
         return None
     
     def is_loaded(self) -> bool:

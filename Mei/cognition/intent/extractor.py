@@ -90,7 +90,9 @@ class IntentExtractor:
         )
         messages = [{"role": "user", "content": "Verify this macro"}]
         response = self._llm.chat_json(messages=messages, system_prompt=prompt)
-        
+        if not isinstance(response, dict):
+            response = None  # verdict must be an object; a bare array is a rejection
+
         if not response or not response.get("approved"):
             print(f"Macro rejected: {response.get('reason') if response else 'No response'}")
             return None
