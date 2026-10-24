@@ -2,6 +2,7 @@ import json
 import os
 import tempfile
 import webbrowser
+from html import escape
 from ..memory.graph.connection import get_kuzu_connection
 
 HTML_TEMPLATE = """
@@ -139,7 +140,7 @@ def export_graph():
                 "group": "Session",
                 "color": "#999999",
                 "size": 15,
-                "details": f"<b>Session</b><br>ID: {row['id']}"
+                "details": f"<b>Session</b><br>ID: {escape(str(row['id']))}"
             })
 
         # Goals
@@ -152,7 +153,7 @@ def export_graph():
                 "group": "Goal",
                 "color": "#1f77b4",
                 "size": 12 + min(sc * 2, 20),
-                "details": f"<b>Goal</b><br>Command: {row['cmd']}<br>Successes: {sc}<br>Fails: {fc}"
+                "details": f"<b>Goal</b><br>Command: {escape(str(row['cmd']))}<br>Successes: {sc}<br>Fails: {fc}"
             })
 
         # Actions
@@ -163,7 +164,7 @@ def export_graph():
                 "group": "Action",
                 "color": "#2ca02c",
                 "size": 10,
-                "details": f"<b>Action</b><br>Tool: {row['tool']}<br>Params: {row['params']}"
+                "details": f"<b>Action</b><br>Tool: {escape(str(row['tool']))}<br>Params: {escape(str(row['params']))}"
             })
             
         # Observations
@@ -175,7 +176,7 @@ def export_graph():
                 "group": "Observation",
                 "color": "#ff7f0e" if row["success"] else "#d62728",
                 "size": 8,
-                "details": f"<b>Observation</b><br>Success: {row['success']}<br>Error: {err}"
+                "details": f"<b>Observation</b><br>Success: {row['success']}<br>Error: {escape(str(err))}"
             })
 
         # Relationships
@@ -198,7 +199,8 @@ def export_graph():
         print(f"Graph query failed (perhaps db is empty): {e}")
 
     data = {"nodes": nodes, "links": links}
-    html_content = HTML_TEMPLATE.replace("GRAPH_DATA_HERE", json.dumps(data))
+    # Escape "</" so a stored value containing "</script>" can't close the inline script block
+    html_content = HTML_TEMPLATE.replace("GRAPH_DATA_HERE", json.dumps(data).replace("</", "<\\/"))
 
     temp_file = tempfile.mktemp(suffix=".html", prefix="mei_graph_")
     with open(temp_file, "w", encoding="utf-8") as f:

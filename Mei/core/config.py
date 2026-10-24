@@ -1,7 +1,7 @@
 from __future__ import annotations
 import os
 import yaml 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 from typing import Optional, List, Dict, Any, Tuple,TYPE_CHECKING, Callable
 from pathlib import Path
 from datetime import datetime
@@ -693,6 +693,14 @@ class Config:
                     if hasattr(config.memory, key):
                         setattr(config.memory, key, value)
             
+            # Update web / kuzu / visual config
+            for section in ('web', 'kuzu', 'visual'):
+                if isinstance(data.get(section), dict):
+                    target = getattr(config, section)
+                    for key, value in data[section].items():
+                        if hasattr(target, key):
+                            setattr(target, key, value)
+
             # Update dynamic preferences
             if 'preferences' in data and isinstance(data['preferences'], dict):
                 config.preferences = dict(data['preferences'])
@@ -740,6 +748,9 @@ class Config:
                 'database_path': self.memory.database_path,
                 'max_episodic_entries': self.memory.max_episodic_entries,
             },
+            'web': asdict(self.web),
+            'kuzu': asdict(self.kuzu),
+            'visual': asdict(self.visual),
             'preferences': dict(self.preferences),
             'debug': self.debug,
             'log_level': self.log_level,

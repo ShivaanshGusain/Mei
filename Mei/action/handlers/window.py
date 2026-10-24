@@ -882,7 +882,7 @@ def _find_element_find_via_ui_automation(query:str, element_type:Optional[str], 
     except:
         return None
     
-def _find_element_find_via_visual(self, query:str, element_type:Optional[str], hwnd:int)->Optional[Tuple[VisualElement, ElementReference]]:
+def _find_element_find_via_visual(query:str, element_type:Optional[str], hwnd:int)->Optional[Tuple[VisualElement, ElementReference]]:
     from ...perception.Visual.analyzer import get_visual_analyzer,  VisualElement
     visual_analyzer = get_visual_analyzer()
     try:

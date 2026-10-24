@@ -11,6 +11,7 @@ from .evaluator import verify_step, sequence_has_verified_evidence, is_verifiabl
 from ...action.executor import get_executor
 from ...action.context import ExecutionContext
 from ...core.state import get_state_machine, AgentState
+from ...core.config import VerifyResult
 
 class MicroPlanner:
     def __init__(self):
@@ -97,6 +98,26 @@ class MicroPlanner:
                     if context.current_window:
                         context.set_variable("current_window_title", context.current_window.title)
 
+                    # Build the observation before the step record so the
+                    # perception data it collects can be persisted with the step.
+                    obs = None
+                    try:
+                        from ...cognition.observation import get_observation_builder
+                        obs = get_observation_builder().build(
+                            action=tool_call.get("action", ""),
+                            parameters=tool_call.get("parameters", {}),
+                            result=result,
+                            # Only domains verify_step actually checks get a verdict;
+                            # the rest fall through to (True, "Success") and would
+                            # misreport as verified in the planner prompt.
+                            verify_result=(VerifyResult(verified=is_ok, reason=reason)
+                                           if is_verifiable_domain(current_step.domain) else None),
+                            target_app=current_step.target
+                        )
+                        context.set_variable("last_observation", obs)
+                    except Exception as e:
+                        print(f"[MicroPlanner] observation build failed: {e}")
+
                     duration_ms = result.data.get("duration_ms", 0) if isinstance(result.data, dict) else 0
                     sanitized_data = self._sanitize_data(result.data)
                     step_results.append({
@@ -109,6 +130,7 @@ class MicroPlanner:
                         "step_description": current_step.description,        #
                         "step_domain": current_step.domain,                  #
                         "step_expected_output": current_step.expected_output, #
+                        "foreground_window": (obs.foreground_window if obs else None) or "",
                     })
                     emit(EventType.PLAN_STEP_COMPLETED, source="MicroPlanner",
                          action=tool_call.get("action", ""),
@@ -116,17 +138,6 @@ class MicroPlanner:
                          method_used=getattr(result, "method_used", "unknown"),
                          duration_ms=duration_ms,
                          data=sanitized_data)
-                    try:
-                        from ...cognition.observation import get_observation_builder
-                        obs = get_observation_builder().build(
-                            action=tool_call.get("action", ""),
-                            parameters=tool_call.get("parameters", {}),
-                            result=result,
-                            target_app=current_step.target
-                        )
-                        context.set_variable("last_observation", obs)
-                    except Exception as e:
-                        print(f"[MicroPlanner] observation build failed: {e}")
                     break
                 
                 else:

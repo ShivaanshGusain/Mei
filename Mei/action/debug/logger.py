@@ -96,7 +96,7 @@ class ExecutionLogger:
                 self.log_path.rename(archive_path)
                 print(f"Rotated log to {archive_name}")
         except IOError as e:
-            print("Error rotating log: {e}")
+            print(f"Error rotating log: {e}")
             return 
     
     def log_execution(self, raw_command: str, success: bool, duration_ms: float,
@@ -153,16 +153,21 @@ class ExecutionLogger:
         return list(reversed(executions[-count:]))
     
     def get_executions_by_intent(self, action:str, target: Optional[str] = None) -> List[Dict]:
+        # Records carry no intent object — match on the tools the steps actually ran.
         matches = []
         for executions in self._log_data.get('executions', []):
-            intent = executions.get('intent', {})
-            if intent.get('action') == action:
-                if target is None or intent.get('target') == target:
-                    matches.append(executions)
+            for step in executions.get('steps', []):
+                if step.get('action') == action:
+                    if target is None or target in str(step.get('parameters', {})):
+                        matches.append(executions)
+                        break
         return matches
-    
+
     def get_failure_analysis(self)->Dict[str, Any]:
-        failure_by_action = {}
+        # Failed records only contain the steps that succeeded before the
+        # failure, so the failing step's index is len(steps) and its error is
+        # the record-level failure_reason.
+        failure_by_command = {}
         failure_by_step = {}
         error_messages = []
         total_failures = 0
@@ -170,23 +175,20 @@ class ExecutionLogger:
             if executions.get('success'):
                 continue
             total_failures +=1
-            action = executions.get('intent',{}).get('action','unknown')
-            failure_by_action[action] = failure_by_action.get(action,0) +1
-            
-            for i,step_results in enumerate(executions.get("step_results", [])):
-                if not step_results.get('success'):
-                    failure_by_step[i] = failure_by_step(i,0) +1
-                    if step_results.get("error"):
-                        error_messages.append(step_results['error'])
-                    break
-        
-        
+            command = executions.get('raw_command') or 'unknown'
+            failure_by_command[command] = failure_by_command.get(command,0) +1
+
+            failed_index = len(executions.get('steps', []))
+            failure_by_step[failed_index] = failure_by_step.get(failed_index,0) +1
+            if executions.get('failure_reason'):
+                error_messages.append(executions['failure_reason'])
+
         from collections import Counter
         error_counts = Counter(error_messages)
         common_errors = [err for err, count in error_counts.most_common(5)]
         return {
             'total_failures': total_failures,
-            'failure_by_action': failure_by_action,
+            'failure_by_command': failure_by_command,
             'failure_by_step': failure_by_step,
             'common_errors': common_errors
         }
@@ -206,8 +208,9 @@ class ExecutionLogger:
         total_duration = sum(e.get('duration_ms', 0) for e in executions)
         by_action = {}
         for e in executions:
-            action = e.get('intent', {}).get('action', 'unknown')
-            by_action[action] = by_action.get(action,0) + 1
+            # Count each execution once per distinct tool it used
+            for action in {s.get('action') or 'unknown' for s in e.get('steps', [])}:
+                by_action[action] = by_action.get(action,0) + 1
             
         return {
             'total_executions': total,

@@ -134,18 +134,20 @@ def write_episode(
             ON CREATE SET
                 o.success = $success,
                 o.error = $error,
-                o.foreground_window = '',
+                o.foreground_window = $foreground_window,
                 o.result_data_json = $data_json,
                 o.created_at = $now
             ON MATCH SET
                 o.success = $success,
                 o.error = $error,
+                o.foreground_window = $foreground_window,
                 o.result_data_json = $data_json
             """
             conn.execute(obs_query, {
                 'obs_id': obs_id,
                 'success': obs_success,
                 'error': obs_error,
+                'foreground_window': step.get('foreground_window') or '',
                 'data_json': obs_data_json,
                 'now': now
             })

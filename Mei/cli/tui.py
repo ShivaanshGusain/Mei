@@ -628,8 +628,12 @@ class MeiTUI(App):
 
         # 5. Re-bootstrap schema
         try:
-            from ..memory.graph import _bootstrap
-            _bootstrap()
+            import Mei.memory.graph as _graph_mod
+            # init_graph() no-ops once bootstrapped — reset so the schema is re-applied
+            _graph_mod._bootstrapped = False
+            _graph_mod.init_graph()
+            if not _graph_mod._bootstrapped:
+                raise RuntimeError("init_graph() did not complete (see console)")
             trace.write("[green]Kùzu re-initialized.[/green]")
         except Exception as e:
             trace.write(f"[red]Re-bootstrap failed: {e}[/red]")

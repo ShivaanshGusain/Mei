@@ -432,7 +432,7 @@ def click_execute(params: Dict[str, Any], context: ExecutionContext)->ActionResu
 
         if context.current_window:
             app_name = context.current_window.process_name or "unknown"
-            window_pattern = _simplify_window_title(context.current_window)
+            window_pattern = _simplify_window_title(context.current_window.title)
         cached_pos = get_cached_element(element_query=query, app_name=app_name, window_pattern=window_pattern)
 
         
@@ -466,7 +466,7 @@ def click_execute(params: Dict[str, Any], context: ExecutionContext)->ActionResu
         
         return ActionResult(
             success = False,
-            error = f"Element '{query} not found via UI Automation or Visual Detection if use_visual_fallback else ''",
+            error = f"Element '{query}' not found via UI Automation" + (" or Visual Detection" if use_visual_fallback else ""),
             method_used='none'
         )
 
@@ -477,7 +477,7 @@ def click_execute(params: Dict[str, Any], context: ExecutionContext)->ActionResu
             method_used='none'
         )
     
-def _simplify_window_title(self,title:str)->str:
+def _simplify_window_title(title:str)->str:
     if not title:
         return '%'
     
@@ -494,7 +494,7 @@ def _simplify_window_title(self,title:str)->str:
     
     return f"%{title[:20]}%"
 
-def _click_at_coords(self,x:int, y:int, click_type:str)->ActionResult:
+def _click_at_coords(x:int, y:int, click_type:str)->ActionResult:
     if click_type=='left':
         pyautogui.click(x,y)
     
@@ -516,12 +516,12 @@ def _click_at_coords(self,x:int, y:int, click_type:str)->ActionResult:
         method_used="pyautogui"
     )
 
-def _click_cached_element(self, cached_ref:ElementReference, query:str, click_type:str)->ActionResult:
+def _click_cached_element(cached_ref:ElementReference, query:str, click_type:str)->ActionResult:
     bbox = cached_ref.bounding_box
     center_x = bbox[0] + bbox[2]//2
     center_y = bbox[1] + bbox[3] //2
 
-    result = self._click_at_coords(center_x,center_y, click_type)
+    result = _click_at_coords(center_x,center_y, click_type)
 
     if result.success:  
         result.data['source'] = 'cached'
@@ -530,7 +530,7 @@ def _click_cached_element(self, cached_ref:ElementReference, query:str, click_ty
     
     return result
 
-def _click_via_ui_automation(self, query:str, element_type:Optional[str], context: ExecutionContext, click_type:str)->ActionResult:
+def _click_via_ui_automation(query:str, element_type:Optional[str], context: ExecutionContext, click_type:str)->ActionResult:
     window = context.get_current_window_or_foreground()
     if not window:
         return ActionResult(
@@ -578,7 +578,7 @@ def _click_via_ui_automation(self, query:str, element_type:Optional[str], contex
             },
             method_used='ui_automation'
         )
-    result =  self._click_at_coords(center_x,center_y, click_type)
+    result =  _click_at_coords(center_x,center_y, click_type)
     if result.success:
         result.data["element_name"] = element.name
         result.data["element_type"] = element.control_type
@@ -586,7 +586,7 @@ def _click_via_ui_automation(self, query:str, element_type:Optional[str], contex
         result.method_used = "ui_automation_pyautogui"
     return result
 
-def _click_via_visual(self, query:str, element_type:Optional[str], context: ExecutionContext, click_type:str)->ActionResult:
+def _click_via_visual(query:str, element_type:Optional[str], context: ExecutionContext, click_type:str)->ActionResult:
     from ...perception.Visual.analyzer import get_visual_analyzer
     try:
         visual_analyzer = get_visual_analyzer()
@@ -632,7 +632,7 @@ def _click_via_visual(self, query:str, element_type:Optional[str], context: Exec
         context.store_element(query,ref)
         center_x,center_y = visual_element.center
 
-        result = self._click_at_coords(center_x,center_y, click_type)
+        result = _click_at_coords(center_x,center_y, click_type)
 
         if result.success:
             result.data['source'] = 'visual'
