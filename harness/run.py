@@ -45,6 +45,8 @@ def main() -> None:
               f"({result.duration_s}s)")
         for err in result.errors:
             print(f"[harness]   error: {err}")
+        for stray in result.side_effects.get("strays", []):
+            print(f"[harness]   stray {stray['type']}: {stray['path']}")
 
     passed = sum(r.task_verdict == "pass" for r in results)
     summary = {
@@ -55,6 +57,9 @@ def main() -> None:
         "by_classification": {c: sum(r.classification == c for r in results)
                               for c in sorted({r.classification for r in results})},
         "timeouts": sum(r.execution_status == "timeout" for r in results),
+        # Runs that wrote something named with the run's id outside the target.
+        "runs_with_strays": sum(bool(r.side_effects.get("strays")) for r in results),
+        "strays_kept": sorted(p for r in results for p in r.cleanup.get("strays_kept", [])),
         # Without --grammar the runner inherits this shell's MEI_TOOL_GRAMMAR,
         # so record that rather than claiming Mei's default.
         "grammar_requested": args.grammar or (f"inherited:{os.environ['MEI_TOOL_GRAMMAR']}"
@@ -64,6 +69,9 @@ def main() -> None:
     (args.out / f"{stamp}_{args.task}_summary.json").write_text(
         json.dumps(summary, indent=2), encoding="utf-8")
     print(f"[harness] {passed}/{len(results)} passed")
+    if summary["runs_with_strays"]:
+        print(f"[harness] runs with strays: {summary['runs_with_strays']} | "
+              f"left in place: {summary['strays_kept'] or 'none'}")
     cm = summary["call_metrics"]
     if cm:
         print(f"[harness] first call correct: {cm['first_call_correct_rate']} | "

@@ -128,17 +128,17 @@ def test_null_is_dir_counts_as_missing():
 
 def test_scoring_is_scoped_to_the_target_step():
     s = score_attempts([
-        attempt("executed", {"path": "Desktop"}, action="cd", step_id="s1", result_success=True),
+        attempt("executed", {"path": "Desktop"}, action="change_directory", step_id="s1", result_success=True),
         attempt("executed", {"path": TARGET, "is_dir": True}, step_id="s2", result_success=True),
     ], FOLDER)
     assert s["target_step_found"] is True
     assert s["attempts"] == 1 and s["attempts_all_steps"] == 2 and s["steps_seen"] == 2
     assert s["first_attempt"]["call_correct"] is True
-    assert s["wrong_but_valid"] == 0, "the cd step must not count as a wrong-but-valid create call"
+    assert s["wrong_but_valid"] == 0, "the change_directory step must not count as a wrong-but-valid create call"
 
 
 def test_missing_target_step_is_flagged():
-    s = score_attempts([attempt("executed", {"path": "Desktop"}, action="cd", step_id="s1")], FOLDER)
+    s = score_attempts([attempt("executed", {"path": "Desktop"}, action="change_directory", step_id="s1")], FOLDER)
     assert s["target_step_found"] is False
     assert s["any_call_correct"] is False
 
@@ -149,3 +149,32 @@ def test_zero_attempt_runs_are_counted_separately():
     m = summarize([ok, empty])
     assert m["runs_scored"] == 1 and m["runs_without_attempts"] == 1
     assert m["any_call_correct_rate"] == 1.0 and m["mean_attempts"] == 1.0
+
+
+def test_misused_tool_in_setup_step_is_not_scored():
+    # 2026-11-09 name_only smoke run: "Navigate to the Desktop" called
+    # create_file_or_folder on the Desktop itself, and the scorer picked that
+    # step instead of the real create step.
+    steps = [
+        attempt("executed", {"path": r"C:\Users\Asus\Desktop", "is_dir": False}, step_id=1,
+                step_description="Navigate to the User Desktop", result_success=True),
+        attempt("executed", {"path": TARGET, "is_dir": False}, step_id=2,
+                step_description="Create a new folder named mei_harness_abc123", result_success=True),
+    ]
+    for expected in (FOLDER, {**FOLDER, "step_hint": "mei_harness_abc123"}):
+        s = score_attempts(steps, expected)
+        assert s["target_step_found"] is True and s["attempts"] == 1
+        assert s["first_attempt"]["args"]["path"]["correct"] is True
+        assert s["first_attempt"]["args"]["is_dir"]["correct"] is False
+
+
+def test_step_hint_finds_target_step_even_with_wrong_tool():
+    s = score_attempts([
+        attempt("executed", {"path": r"C:\Users\Asus\Desktop"}, step_id=1,
+                step_description="Navigate to the Desktop", result_success=True),
+        attempt("executed", {}, action="get_cwd", step_id=2,
+                step_description="Create a new folder named mei_harness_abc123", result_success=True),
+    ], {**FOLDER, "step_hint": "mei_harness_abc123"})
+    assert s["target_step_found"] is True
+    assert s["first_attempt"]["action"] == "get_cwd"
+    assert s["first_attempt"]["tool_name_correct"] is False

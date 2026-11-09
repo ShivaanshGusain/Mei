@@ -86,19 +86,42 @@ def target_step_attempts(attempts: List[Dict[str, Any]], expected: Dict[str, Any
 
     A multi-step plan (e.g. "go to Desktop", then "create the folder") would
     otherwise score the first step's attempts as first attempts at the
-    expected call. The target step is the first step in which any attempt
-    names the expected tool. If no step does, every attempt is returned and
-    the second value is False, so the run still counts as a miss.
+    expected call. Picking the first step that names the expected tool is not
+    enough either: a "go to Desktop" step can misuse create_file_or_folder on
+    the Desktop itself (seen 2026-11-09), which then gets scored instead of
+    the real create step.
+
+    So the target step is chosen in this order:
+      1. steps whose description contains expected["step_hint"] (the task's
+         unique name), preferring ones that name the expected tool;
+      2. otherwise steps in which any attempt names the expected tool.
+    The last candidate wins, since setup steps come before the step that
+    makes the call. If nothing matches, every attempt is returned and the
+    second value is False, so the run still counts as a miss.
     """
+    order: List[Any] = []
     for a in attempts:
-        if a.get("action") == expected["action"]:
-            sid = a.get("step_id")
-            return [x for x in attempts if x.get("step_id") == sid], True
+        if a.get("step_id") not in order:
+            order.append(a.get("step_id"))
+
+    def step_has(sid, pred) -> bool:
+        return any(pred(a) for a in attempts if a.get("step_id") == sid)
+
+    names_tool = lambda a: a.get("action") == expected["action"]
+    hint = (expected.get("step_hint") or "").lower()
+    hinted = [s for s in order
+              if hint and step_has(s, lambda a: hint in str(a.get("step_description") or "").lower())]
+    candidates = ([s for s in hinted if step_has(s, names_tool)] or hinted
+                  or [s for s in order if step_has(s, names_tool)])
+    if candidates:
+        sid = candidates[-1]
+        return [x for x in attempts if x.get("step_id") == sid], True
     return list(attempts), False
 
 
 def score_attempts(attempts: List[Dict[str, Any]], expected: Dict[str, Any]) -> Dict[str, Any]:
-    """expected = {"action": str, "args": {name: {"kind": "path"|"bool"|"eq", "expected": ..., "default": ...}}}"""
+    """expected = {"action": str, "step_hint": str (optional),
+                   "args": {name: {"kind": "path"|"bool"|"eq", "expected": ..., "default": ...}}}"""
     all_attempts = attempts
     attempts, target_found = target_step_attempts(all_attempts, expected)
     outcomes: Dict[str, int] = {}

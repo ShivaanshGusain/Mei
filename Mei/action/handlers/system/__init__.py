@@ -217,7 +217,7 @@ def register_system_tools(executor) -> None:
     # ═══════════════════════════════════════════════════
 
     executor.register(
-        name="cd",
+        name="change_directory",  # the name prompt_builder, intent prompts and stability use
         impl=change_dir_execute,
         domain="system",
         schema=CHANGE_DIR_SCHEMA,

@@ -196,6 +196,11 @@ class PlanExecutor:
                             p = onedrive
                         else:
                             p = candidate
+                    elif context is not None and context.get_variable("cwd"):
+                        # change_directory only sets this virtual cwd (it never
+                        # os.chdir()s); without it a relative path would land in
+                        # the process cwd, i.e. Mei's own folder.
+                        p = Path(context.get_variable("cwd")) / p
                 parameters[key] = str(p.expanduser().resolve())
 
         # is_valid, error = handler.validate(parameters)

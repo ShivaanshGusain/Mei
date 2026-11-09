@@ -47,6 +47,10 @@ class TaskSpec:
     env: Optional[Dict[str, str]] = None
     # Optional per-attempt tool-call scoring; never affects the verdict.
     scorer: Optional[Callable[["TaskSpec"], dict]] = None
+    # Optional check for effects outside the verified target (e.g. a folder
+    # created in the wrong directory). Runs before CLEANUP; never affects the
+    # verdict. A teardown may return a dict, merged into the cleanup record.
+    side_effects: Optional[Callable[["TaskSpec"], dict]] = None
 
 
 # Kept so the original property tests read unchanged.
@@ -66,6 +70,7 @@ class TaskResult:
     exit_code: Optional[int] = None
     duration_s: float = 0.0
     call_scores: dict = field(default_factory=dict)
+    side_effects: dict = field(default_factory=dict)
 
 
 def _read_self_report(path: Path) -> str:
@@ -178,6 +183,13 @@ def run_task(spec: TaskSpec) -> TaskResult:
         except Exception as exc:
             errors.append(f"scorer_error: {exc}")
 
+    side_effects: dict = {}
+    if spec.side_effects is not None:
+        try:
+            side_effects = spec.side_effects(spec)
+        except Exception as exc:
+            errors.append(f"side_effects_error: {exc}")
+
     # --- CAPTURE_ARTIFACTS ---
     # Snapshot evidence paths now, before CLEANUP runs, so a teardown failure
     # (or a teardown that deletes working files) can never erase evidence
@@ -190,7 +202,9 @@ def run_task(spec: TaskSpec) -> TaskResult:
     cleanup_result: dict = {"ok": True}
     if spec.teardown is not None:
         try:
-            spec.teardown(spec)
+            extra = spec.teardown(spec)
+            if isinstance(extra, dict):
+                cleanup_result.update(extra)
         except Exception as exc:
             cleanup_result = {"ok": False, "error": str(exc)}
             errors.append(f"cleanup_error: {exc}")
@@ -208,4 +222,5 @@ def run_task(spec: TaskSpec) -> TaskResult:
         exit_code=exit_code,
         duration_s=round(duration_s, 2),
         call_scores=call_scores,
+        side_effects=side_effects,
     ))

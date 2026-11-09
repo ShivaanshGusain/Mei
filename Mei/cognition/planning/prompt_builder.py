@@ -1,3 +1,4 @@
+import json
 from typing import Any
 import numpy as np
 
@@ -338,8 +339,15 @@ def _get_env_state(step: IntentStep, context: ExecutionContext) -> str:
                   for root in roots:
                       lines.append(f"  - {root}\\<your_filename>")
                   
-                  step_lower = step.description.lower() if step.description else ""
-                  if "desktop" in step_lower:
+                  # The description alone can lose the location ("Create a new
+                  # folder named X" drops "on the Desktop"), and the fallback
+                  # example below then steers the model into roots[0].
+                  step_text = " ".join([
+                      step.description or "",
+                      step.target or "",
+                      json.dumps(step.parameters or {}, default=str),
+                  ]).lower()
+                  if "desktop" in step_text:
                       lines.append(f"EXAMPLE: {desktop}\\modulo.py")
                   else:
                       lines.append(f"EXAMPLE: {roots[0]}\\modulo.py")
@@ -444,6 +452,18 @@ def build_step_prompt(step: IntentStep, context: ExecutionContext) -> tuple:
             f"  ✓ {s}" for s in completed
         )
 
+    # ── Step target / parameters from intent decomposition ──────────────────
+    # The intent model often resolves the concrete value (e.g. the full path)
+    # here; without it the planner regenerates it from the description alone.
+    step_hints = ""
+    if step.target:
+        step_hints += f"\nSTEP TARGET: {step.target}"
+    if step.parameters:
+        step_hints += (
+            f"\nSTEP PARAMETERS (from the task breakdown; use these values unless "
+            f"they are clearly wrong): {json.dumps(step.parameters, default=str)}"
+        )
+
     cdp_active = context.get_variable("browser_cdp_active", False)
     env_state = _get_env_state(step, context)
 
@@ -462,7 +482,7 @@ HEALING CONTEXT:
 """
 
     prompt = f"""USER GOAL: {step.description}
-EXPECTED OUTCOME: {step.expected_output}
+EXPECTED OUTCOME: {step.expected_output}{step_hints}
 DOMAIN: {step.domain}
 ACTIVE WINDOW: {context.get_variable('current_window_title', 'Desktop')}
 CURRENT URL: {context.get_variable('current_url', '')}
