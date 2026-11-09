@@ -944,34 +944,54 @@ FIND_WINDOW_SCHEMA = {
     'hwnd'      : {'type': 'int', 'required': False,'description': 'hwnd of the window'}
 }
 VERIFY_WINDOW_SCHEMA = {
-    "title|expected_title|query"    : {"type": "str", "required" : True, "description": "the title (expected) of the opening window"},
-    "timeout"                       : {"type": "str", "required" : False, "description":"wait for the window to open"}
+    "title"     : {"type": "str", "required": True, "description": "the title (expected) of the opening window"},
+    "timeout"   : {"type": "float", "required": False, "description": "seconds to wait for the window to open"}
 }
 FOCUS_WINDOW_SCHEMA = {
+    # All optional: _resolve_window takes query/title or hwnd, and some tools
+    # fall back to the current window. Requiring hwnd made the grammar force
+    # the model to invent a window handle.
+    "query"     : {"type": 'str', 'required': False, 'description': 'title (or part of it) of the window'},
     "title"     : {"type": 'str', 'required': False, 'description': 'title of the window'},
-    'hwnd'      : {'type': 'int', 'required': True,  'description': 'hwnd of the window'}
+    'hwnd'      : {'type': 'int', 'required': False, 'description': 'hwnd of the window'}
 }
 MINIMIZE_WINDOW_SCHEMA = {
+    # All optional: _resolve_window takes query/title or hwnd, and some tools
+    # fall back to the current window. Requiring hwnd made the grammar force
+    # the model to invent a window handle.
+    "query"     : {"type": 'str', 'required': False, 'description': 'title (or part of it) of the window'},
     "title"     : {"type": 'str', 'required': False, 'description': 'title of the window'},
-    'hwnd'      : {'type': 'int', 'required': True,  'description': 'hwnd of the window'}
+    'hwnd'      : {'type': 'int', 'required': False, 'description': 'hwnd of the window'}
 } 
 MAXIMIZE_WINDOW_SCHEMA = {
+    # All optional: _resolve_window takes query/title or hwnd, and some tools
+    # fall back to the current window. Requiring hwnd made the grammar force
+    # the model to invent a window handle.
+    "query"     : {"type": 'str', 'required': False, 'description': 'title (or part of it) of the window'},
     "title"     : {"type": 'str', 'required': False, 'description': 'title of the window'},
-    'hwnd'      : {'type': 'int', 'required': True,  'description': 'hwnd of the window'}
+    'hwnd'      : {'type': 'int', 'required': False, 'description': 'hwnd of the window'}
 } 
 RESTORE_WINDOW_SCHEMA = {
+    # All optional: _resolve_window takes query/title or hwnd, and some tools
+    # fall back to the current window. Requiring hwnd made the grammar force
+    # the model to invent a window handle.
+    "query"     : {"type": 'str', 'required': False, 'description': 'title (or part of it) of the window'},
     "title"     : {"type": 'str', 'required': False, 'description': 'title of the window'},
-    'hwnd'      : {'type': 'int', 'required': True,  'description': 'hwnd of the window'}
+    'hwnd'      : {'type': 'int', 'required': False, 'description': 'hwnd of the window'}
 } 
 CLOSE_WINDOW_SCHEMA = {
+    # All optional: _resolve_window takes query/title or hwnd, and some tools
+    # fall back to the current window. Requiring hwnd made the grammar force
+    # the model to invent a window handle.
+    "query"     : {"type": 'str', 'required': False, 'description': 'title (or part of it) of the window'},
     "title"     : {"type": 'str', 'required': False, 'description': 'title of the window'},
-    'hwnd'      : {'type': 'int', 'required': True,  'description': 'hwnd of the window'}
+    'hwnd'      : {'type': 'int', 'required': False, 'description': 'hwnd of the window'}
 } 
 FIND_ELEMENT_SCHEMA = {
     "query"       : {"type": "str", "required": True, "description": "name of the elemnt"},
     "element_type": {"type": "str", "required": False, "description": "Type of button"},
     "timeout"     : {"type": "float", "required": False, "description": "try for these many seconds till the element appears"},
-    "cache_as"    : {"type": "str", "required": True, "description": "cache the element under this name"}
+    "cache_as"    : {"type": "str", "required": False, "description": "cache the element under this name"}
 
 }   
 def register_window_tools(executor: PlanExecutor):

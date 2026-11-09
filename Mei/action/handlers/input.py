@@ -795,7 +795,7 @@ TYPE_TEXT_SCHEMA = {
 
 HOTKEY_SCHEMA = {
     "keys": {"type": "List[str]", "required": True, "description": "List of hotkeys"},
-    "hold_time":{"type": "int", "required": False, "description": "holding time for the hotkey"},
+    "hold_time":{"type": "float", "required": False, "description": "holding time for the hotkey"},
     "presses"  :{"type": "int", "required": False, "description": "Number of presses"}
 }
 
