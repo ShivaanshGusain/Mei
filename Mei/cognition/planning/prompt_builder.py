@@ -36,7 +36,7 @@ TOOL_REGISTRY = {
     "list_files":               "List files and folders in a directory",
     "read_file":                "Read file contents by line range with line numbers",
     "search_files":             "Search for text or regex in LOCAL DISK files under a directory. NOT for websites — use web_search for that.",
-    "create_file_or_folder":    "Create a new file or directory at a given path. PREFER over launching a text editor.",
+    "create_file_or_folder":    "Use when creating a file OR a folder/directory at a given path. PREFER over launching a text editor. Set is_dir=true for a folder/directory.",
     "write_to_file":            "Write or append content to a file",
     "edit_file_by_lines":       "Replace a range of lines in a file",
     "delete_path":              "Send a file or folder to Recycle Bin, confirm must be true",
@@ -168,7 +168,9 @@ TOOL_DETAIL = {
     ),
     "create_file_or_folder": (
         'create_file_or_folder(path: str, is_dir?: bool, content?: str)\n'
-        '  Create a new file or directory. PREFER over launching a text editor. Use full absolute path.'
+        '  Use when creating a file OR a folder/directory. PREFER over launching a text editor. '
+        'Use full absolute path. is_dir has NO safe default — if the task says "folder" or '
+        '"directory", you MUST pass is_dir=true; for a file, pass is_dir=false (or omit).'
     ),
     "write_to_file": (
         'write_to_file(path: str, content: str, mode?: "write"|"append"|"overwrite")\n'
@@ -459,7 +461,8 @@ AVAILABLE ACTIONS:
 
 CRITICAL RULES:
 1. If BROWSER CDP ACTIVE is True, use web_* tools for browser interactions, not type_text/click.
-2. For creating files, use create_file_or_folder with a full absolute path. Do NOT open a text editor.
+2. For creating files OR folders, use create_file_or_folder with a full absolute path. Do NOT open a text editor.
+3. If the step is asking you to create a FOLDER or DIRECTORY (not a file), you MUST include "is_dir": true in parameters. Omitting is_dir creates an empty FILE instead, which is wrong.
 
 Select the EXACT single tool call to achieve this step only.
 Respond with JSON ONLY: {{"action": "...", "parameters": {{...}}}}

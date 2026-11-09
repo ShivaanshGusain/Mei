@@ -94,6 +94,56 @@ def create_desktop_folder(run_dir: Path, timeout_s: float, memory: str = "fresh"
     )
 
 
+def create_desktop_file(run_dir: Path, timeout_s: float, memory: str = "fresh",
+                        desktop: Path = DESKTOP) -> TaskSpec:
+    """'Create a file named mei_harness_<id>.txt on the Desktop' -> is it a file, not a directory?
+
+    Companion to create_desktop_folder: regresses the is_dir fix in the other
+    direction. A fix that makes the model always pass is_dir=true (or a tool
+    change that flips the default) would pass the folder task and silently
+    fail this one — run both, never just one.
+    """
+    file_name = f"{NAME_PREFIX}{uuid.uuid4().hex[:8]}.txt"
+    target = desktop / file_name
+    state = {"existed_before": None}
+
+    def setup(spec: TaskSpec) -> None:
+        if not desktop.is_dir():
+            raise RuntimeError(f"Desktop not found at {desktop}")
+        state["existed_before"] = target.exists()
+        if state["existed_before"]:
+            raise RuntimeError(f"{target} already exists; refusing to run")
+
+    def verifier(spec: TaskSpec) -> bool:
+        return target.is_file()
+
+    def teardown(spec: TaskSpec) -> None:
+        # Only delete what this run created: it must not have existed at
+        # setup, and must be the exact uniquely-named path we asked for.
+        if state["existed_before"] is not False:
+            return
+        if target.parent != desktop or not target.name.startswith(NAME_PREFIX):
+            raise RuntimeError(f"refusing to delete unexpected path {target}")
+        if target.is_dir():
+            shutil.rmtree(target)
+        elif target.exists():
+            target.unlink()
+
+    run_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / "task.txt").write_text(f"target={target}\n", encoding="utf-8")
+    return _mei_spec(
+        name="create_desktop_file",
+        run_dir=run_dir,
+        command=f"Create a file named {file_name} on the Desktop",
+        timeout_s=timeout_s,
+        memory=memory,
+        setup=setup,
+        verifier=verifier,
+        teardown=teardown,
+    )
+
+
 TASKS: Dict[str, Callable[..., TaskSpec]] = {
     "create_desktop_folder": create_desktop_folder,
+    "create_desktop_file": create_desktop_file,
 }

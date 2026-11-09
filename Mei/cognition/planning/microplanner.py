@@ -66,6 +66,20 @@ class MicroPlanner:
 
                 action = tool_call.get("action", "")
                 parameters = tool_call.get("parameters", {})
+
+                if tool_names and action not in tool_names:
+                    # chat_tool_call's enum constraint is sampling-time-only and
+                    # disappears entirely on its unconstrained chat_json fallback —
+                    # re-check here so an off-menu action can never reach execution.
+                    current_step.retry_count += 1
+                    context.set_variable(
+                        "last_step_error",
+                        f"BLOCKED: '{action}' is not one of the tools available for this "
+                        f"step ({', '.join(tool_names)}). Choose one of those tools."
+                    )
+                    print(f"[MicroPlanner X-RAY] Blocked off-menu action: {action}")
+                    continue
+
                 call_signature = (action, json.dumps(self._sanitize_data(parameters), sort_keys=True))
 
                 if call_signature == last_failed_call:
