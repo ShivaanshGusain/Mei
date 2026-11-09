@@ -13,9 +13,11 @@ tracemalloc.start()
 #---------------------
 
 from llama_cpp import Llama
+from llama_cpp.llama_grammar import LlamaGrammar
 
 from ...core.config import get_config
 from ...core.events import emit, subscribe, EventType
+from .tool_schema import build_tool_call_schema, grammar_mode
 from typing import List, Dict, Optional, Any, Union
 
 import threading
@@ -34,7 +36,11 @@ class LLMEngine:
         self._model = None
         self._model_loaded = False
         self._load_lock = threading.Lock()
-        
+        # Set by chat_tool_call: which grammar mode produced the last answer,
+        # and why the last call returned None (if it did).
+        self.last_tool_call_mode: Optional[str] = None
+        self.last_tool_call_error: Optional[str] = None
+
         self._context_length = self.config.llm.context_length
         self._max_tokens = self.config.llm.max_tokens
         self._temperature = self.config.llm.temperature
@@ -170,56 +176,76 @@ class LLMEngine:
         self,
         messages: List[Dict[str, str]],
         tool_names: List[str],
-        system_prompt: str = None
+        system_prompt: str = None,
+        tool_schemas: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> Optional[Dict]:
         """
-        Constrained JSON generation — model output is physically restricted to
-        valid tool names via JSON Schema grammar. No retry loop needed.
+        Constrained JSON generation for one tool call.
 
-        tool_names: list of valid action names from the tool retriever.
-        Falls back to chat_json if constrained decoding is unavailable.
+        Grammar mode comes from MEI_TOOL_GRAMMAR (see tool_schema.py):
+          per_tool  — tool name AND that tool's arguments are constrained,
+                      plus a no_tool option (default)
+          name_only — only the tool name is constrained (original behaviour)
+          off       — no grammar, plain chat_json
+        per_tool degrades to name_only, then chat_json, if the grammar fails.
+        The mode that actually produced the answer is left in
+        self.last_tool_call_mode so callers can log silent degradation.
         """
+        # Reset per call so a failed load never leaves the previous call's mode.
+        self.last_tool_call_mode = None
+        self.last_tool_call_error = None
         if not self._load_model():
+            self.last_tool_call_error = "model failed to load"
             return None
 
-        schema = {
-            "type": "object",
-            "properties": {
-                "action": {
-                    "type": "string",
-                    "enum": tool_names
-                },
-                "parameters": {
-                    "type": "object"
-                }
-            },
-            "required": ["action", "parameters"]
-        }
+        requested = grammar_mode()
+        chain = {"per_tool": ["per_tool", "name_only"], "name_only": ["name_only"], "off": []}[requested]
 
         full_messages = []
         if system_prompt:
             full_messages.append({"role": "system", "content": system_prompt})
         full_messages.extend(messages)
 
-        try:
-            output = self._model.create_chat_completion(
-                messages=full_messages,
-                max_tokens=self._max_tokens,
-                temperature=self._temperature,
-                response_format={
-                    "type": "json_object",
-                    "schema": schema
-                }
+        for mode in chain:
+            schema = build_tool_call_schema(
+                tool_names, tool_schemas, mode=mode,
+                allow_no_tool=(requested == "per_tool"),
             )
-            raw = output["choices"][0]["message"]["content"].strip()
-            result = json.loads(raw)
-            print(f"[{self._name}] chat_tool_call: action={result.get('action')}")
+            try:
+                # Build the grammar here rather than via response_format:
+                # llama-cpp-python silently swaps an unconvertible schema for
+                # plain JSON there, which would leave per_tool unenforced while
+                # still reporting it. Building it ourselves makes that raise,
+                # so the chain falls through to the next mode honestly.
+                grammar = LlamaGrammar.from_json_schema(json.dumps(schema), verbose=False)
+            except Exception as e:
+                print(f"[{self._name}] chat_tool_call: {mode} grammar failed to build: {e}")
+                continue
+
+            # Only a grammar that fails to build degrades to the next mode.
+            # A generation that fails (cut off at max_tokens, invalid JSON,
+            # runtime error) is not a grammar problem: rerunning it under a
+            # weaker grammar would cost another full generation and record the
+            # wrong mode. Return None so the planner counts it as unparseable.
+            self.last_tool_call_mode = mode
+            try:
+                output = self._model.create_chat_completion(
+                    messages=full_messages,
+                    max_tokens=self._max_tokens,
+                    temperature=self._temperature,
+                    grammar=grammar,
+                )
+                raw = output["choices"][0]["message"]["content"].strip()
+                result = json.loads(raw)
+            except Exception as e:
+                self.last_tool_call_error = f"{type(e).__name__}: {e}"
+                print(f"[{self._name}] chat_tool_call ({mode}) generation failed: {e}")
+                return None
+            print(f"[{self._name}] chat_tool_call ({mode}): action={result.get('action') if isinstance(result, dict) else None}")
             return result
 
-        except Exception as e:
-            # Fallback to chat_json if constrained decoding is not supported
-            print(f"[{self._name}] chat_tool_call failed ({e}), falling back to chat_json")
-            return self.chat_json(messages=messages, system_prompt=system_prompt, max_retries=1)
+        self.last_tool_call_mode = "off" if requested == "off" else "fallback_chat_json"
+        return self.chat_json(messages=messages, system_prompt=system_prompt, max_retries=1)
 
     def _extract_json(self,text:str)->Optional[str]:
         """Return the first complete JSON value (object OR array) embedded in text.

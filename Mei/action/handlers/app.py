@@ -451,8 +451,10 @@ LAUNCH_APP_SCHEMA = {
 }
 
 TERMINATE_APP_SCHEMA = {
-    "app_name": {"type": "str", "required": True, "description": "Name of the application to launch" },
-    "pid"     : {"type": "int", "required": True}
+    # Either one (terminate_app_validate). Requiring both made the grammar force
+    # an invented pid, and a pid is acted on before app_name.
+    "app_name": {"type": "str", "required": False, "description": "Name of the application to terminate" },
+    "pid"     : {"type": "int", "required": False, "description": "Process id, only if it is known exactly"}
 }
 
 def terminate_app_validate(params: Dict[str, Any])-> Tuple[bool, Optional[str]]:

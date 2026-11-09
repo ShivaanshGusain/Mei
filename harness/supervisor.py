@@ -45,6 +45,8 @@ class TaskSpec:
     log_path: Optional[Path] = None
     cwd: Optional[Path] = None
     env: Optional[Dict[str, str]] = None
+    # Optional per-attempt tool-call scoring; never affects the verdict.
+    scorer: Optional[Callable[["TaskSpec"], dict]] = None
 
 
 # Kept so the original property tests read unchanged.
@@ -63,6 +65,7 @@ class TaskResult:
     cleanup: dict = field(default_factory=dict)
     exit_code: Optional[int] = None
     duration_s: float = 0.0
+    call_scores: dict = field(default_factory=dict)
 
 
 def _read_self_report(path: Path) -> str:
@@ -168,6 +171,13 @@ def run_task(spec: TaskSpec) -> TaskResult:
         task_verdict = "verifier_error"
         errors.append(f"verifier_error: {exc}")
 
+    call_scores: dict = {}
+    if spec.scorer is not None:
+        try:
+            call_scores = spec.scorer(spec)
+        except Exception as exc:
+            errors.append(f"scorer_error: {exc}")
+
     # --- CAPTURE_ARTIFACTS ---
     # Snapshot evidence paths now, before CLEANUP runs, so a teardown failure
     # (or a teardown that deletes working files) can never erase evidence
@@ -197,4 +207,5 @@ def run_task(spec: TaskSpec) -> TaskResult:
         cleanup=cleanup_result,
         exit_code=exit_code,
         duration_s=round(duration_s, 2),
+        call_scores=call_scores,
     ))

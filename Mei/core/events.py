@@ -59,6 +59,7 @@ class EventType(Enum):
     PLAN_STEP_STARTED = auto()
     PLAN_STEP_COMPLETED = auto()
     PLAN_STEP_FAILED = auto()
+    TOOL_CALL_PROPOSED = auto()     # every planner tool-call attempt, incl. blocked ones
     PLAN_COMPLETED = auto()
     PLAN_FAILED = auto()
     

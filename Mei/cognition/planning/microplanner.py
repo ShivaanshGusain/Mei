@@ -6,6 +6,7 @@ from ...core.task import IntentSequence, StepExecutionStatus
 from ...core.events import emit, EventType
 from ...core.cancellation import get_cancellation_token
 from ..llm.engine import get_llm_engine
+from ..llm.tool_schema import NO_TOOL_ACTION
 from .prompt_builder import build_step_prompt
 from .evaluator import verify_step, sequence_has_verified_evidence, is_verifiable_domain
 from ...action.executor import get_executor
@@ -30,6 +31,22 @@ class MicroPlanner:
         else:
             return str(data)
 
+    def _report_attempt(self, step, attempt: int, outcome: str, tool_call, tool_names,
+                        grammar_used, **extra) -> None:
+        """One TOOL_CALL_PROPOSED event per planner attempt, whatever happened to it.
+
+        PLAN_STEP_COMPLETED only covers the winning call; this is what lets the
+        harness score first-attempt accuracy, abstentions and blocked calls.
+        """
+        call = tool_call if isinstance(tool_call, dict) else {}
+        emit(EventType.TOOL_CALL_PROPOSED, source="MicroPlanner",
+             step_id=step.step_id, step_description=step.description,
+             attempt=attempt, outcome=outcome, grammar_mode=grammar_used,
+             tool_names=list(tool_names or []),
+             action=call.get("action"),
+             parameters=self._sanitize_data(call.get("parameters", {})),
+             **extra)
+
     def execute_sequence(self, sequence: IntentSequence, context: ExecutionContext) -> bool:
         step_results = []
         state = get_state_machine()
@@ -52,22 +69,55 @@ class MicroPlanner:
 
             while current_step.retry_count <= current_step.max_retries:
                 prompt, tool_names = build_step_prompt(current_step, context)
+                tool_schemas = {}
+                for name in tool_names:
+                    spec = self._executor.get_tool(name)
+                    tool_schemas[name] = spec.schema if spec else {}
                 tool_call = self._llm.chat_tool_call(
                     messages=[{"role": "user", "content": prompt}],
-                    tool_names=tool_names
+                    tool_names=tool_names,
+                    tool_schemas=tool_schemas,
                 )
-                print(f"\n[MicroPlanner X-RAY] LLM Tool Call: {tool_call}")
+                grammar_used = getattr(self._llm, "last_tool_call_mode", None)
+                attempt = current_step.retry_count
+                print(f"\n[MicroPlanner X-RAY] LLM Tool Call ({grammar_used}): {tool_call}")
                 if isinstance(tool_call, list) and len(tool_call) > 0:
                     tool_call = tool_call[0]
 
                 if not tool_call or not isinstance(tool_call, dict):
+                    llm_error = getattr(self._llm, "last_tool_call_error", None)
+                    self._report_attempt(current_step, attempt, "unparseable", None, tool_names, grammar_used,
+                                         error=llm_error)
                     current_step.retry_count += 1
+                    # Overwrite, so the retry prompt doesn't show a stale error
+                    # from an earlier attempt.
+                    context.set_variable(
+                        "last_step_error",
+                        "Your previous answer was not a valid tool call. Respond with exactly one "
+                        "JSON object: {\"action\": ..., \"parameters\": {...}}."
+                    )
                     continue
 
                 action = tool_call.get("action", "")
                 parameters = tool_call.get("parameters", {})
 
+                if action == NO_TOOL_ACTION:
+                    # Abstaining is better than a forced wrong call, but it is
+                    # never success: it uses a retry, and if every attempt
+                    # abstains the step fails visibly instead of passing silently.
+                    abstain_reason = parameters.get("reason", "") if isinstance(parameters, dict) else ""
+                    self._report_attempt(current_step, attempt, "no_tool", tool_call, tool_names, grammar_used)
+                    current_step.retry_count += 1
+                    context.set_variable(
+                        "last_step_error",
+                        f"You chose no_tool ({abstain_reason or 'no reason given'}). If one of the "
+                        f"AVAILABLE ACTIONS can do this step, call it; otherwise return no_tool again."
+                    )
+                    print(f"[MicroPlanner X-RAY] Model abstained: {abstain_reason}")
+                    continue
+
                 if tool_names and action not in tool_names:
+                    self._report_attempt(current_step, attempt, "blocked_off_menu", tool_call, tool_names, grammar_used)
                     # chat_tool_call's enum constraint is sampling-time-only and
                     # disappears entirely on its unconstrained chat_json fallback —
                     # re-check here so an off-menu action can never reach execution.
@@ -83,6 +133,7 @@ class MicroPlanner:
                 call_signature = (action, json.dumps(self._sanitize_data(parameters), sort_keys=True))
 
                 if call_signature == last_failed_call:
+                    self._report_attempt(current_step, attempt, "blocked_duplicate", tool_call, tool_names, grammar_used)
                     current_step.retry_count += 1
                     context.set_variable(
                         "last_step_error",
@@ -93,8 +144,15 @@ class MicroPlanner:
                     print(f"[MicroPlanner X-RAY] Blocked duplicate call: {call_signature}")
                     continue
 
+                # The executor rewrites path arguments in place (relative ->
+                # absolute). Snapshot what the model actually emitted so the
+                # executed event logs raw output like every other outcome does.
+                raw_call = {"action": action, "parameters": json.loads(json.dumps(self._sanitize_data(parameters), default=str))}
                 result = self._executor.execute_single_action(action, parameters, context)
                 is_ok, reason = verify_step(current_step, result, context)
+                self._report_attempt(current_step, attempt, "executed", raw_call, tool_names, grammar_used,
+                                     result_success=bool(result.success), verify_ok=bool(is_ok),
+                                     error=result.error)
 
                 print(f"[MicroPlanner X-RAY] Result: success={result.success}, error={result.error}, method={result.method_used}")
                 print(f"[MicroPlanner X-RAY] Verify: ok={is_ok}, reason={reason}")

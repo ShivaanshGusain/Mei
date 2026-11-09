@@ -3,6 +3,7 @@ import numpy as np
 
 from ...core.task import IntentStep
 from ...action.context import ExecutionContext
+from ..llm.tool_schema import NO_TOOL_ACTION, grammar_mode
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TOOL_REGISTRY  — one-line descriptions, used for embedding & similarity search
@@ -170,7 +171,7 @@ TOOL_DETAIL = {
         'create_file_or_folder(path: str, is_dir?: bool, content?: str)\n'
         '  Use when creating a file OR a folder/directory. PREFER over launching a text editor. '
         'Use full absolute path. is_dir has NO safe default — if the task says "folder" or '
-        '"directory", you MUST pass is_dir=true; for a file, pass is_dir=false (or omit).'
+        '"directory", you MUST pass is_dir=true; for a file, pass is_dir=false.'
     ),
     "write_to_file": (
         'write_to_file(path: str, content: str, mode?: "write"|"append"|"overwrite")\n'
@@ -420,6 +421,19 @@ def build_step_prompt(step: IntentStep, context: ExecutionContext) -> tuple:
         if name in TOOL_DETAIL
     )
 
+    # The no_tool option only exists in per_tool grammar mode; in name_only the
+    # prompt stays exactly as before so the two modes can be compared fairly.
+    no_tool_rule = ""
+    if grammar_mode() == "per_tool":
+        mini_catalog += (
+            f"\n  {NO_TOOL_ACTION}(reason: str)\n"
+            f"  Use ONLY if none of the actions above can perform this step. Give the reason."
+        )
+        no_tool_rule = (
+            f"\n4. If none of the AVAILABLE ACTIONS fits this step, respond with action "
+            f'"{NO_TOOL_ACTION}" and a short reason. Never pick an unrelated tool just to answer.'
+        )
+
     obs_block = _format_last_observation(context.get_variable("last_observation"))
         
     # ── Completed steps context ──────────────────────────────────────────────
@@ -462,7 +476,7 @@ AVAILABLE ACTIONS:
 CRITICAL RULES:
 1. If BROWSER CDP ACTIVE is True, use web_* tools for browser interactions, not type_text/click.
 2. For creating files OR folders, use create_file_or_folder with a full absolute path. Do NOT open a text editor.
-3. If the step is asking you to create a FOLDER or DIRECTORY (not a file), you MUST include "is_dir": true in parameters. Omitting is_dir creates an empty FILE instead, which is wrong.
+3. If the step is asking you to create a FOLDER or DIRECTORY (not a file), you MUST include "is_dir": true in parameters. Omitting is_dir creates an empty FILE instead, which is wrong.{no_tool_rule}
 
 Select the EXACT single tool call to achieve this step only.
 Respond with JSON ONLY: {{"action": "...", "parameters": {{...}}}}
